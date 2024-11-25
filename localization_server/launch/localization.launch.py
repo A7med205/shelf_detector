@@ -65,6 +65,15 @@ def generate_launch_description():
             parameters=[amcl_yaml]
         ),
 
+        # Static transform from "map" to "odom"
+        Node(
+            package='tf2_ros',
+            executable='static_transform_publisher',
+            name='static_transform_publisher_map_to_odom',
+            output='log',
+            arguments=['0', '0', '0', '0', '0', '0', 'map', 'odom']  # Adjust the arguments as needed
+        ),
+
         Node(
             package='nav2_lifecycle_manager',
             executable='lifecycle_manager',

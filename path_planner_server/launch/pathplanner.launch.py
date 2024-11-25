@@ -12,8 +12,6 @@ def generate_launch_description():
     recovery_yaml = os.path.join(get_package_share_directory('path_planner_server'), 'config', 'recovery.yaml')
     planner_yaml = os.path.join(get_package_share_directory('path_planner_server'), 'config', 'planner_server.yaml')
     controller_yaml = os.path.join(get_package_share_directory('path_planner_server'), 'config', 'controller.yaml')
-    filters_yaml = os.path.join(get_package_share_directory('path_planner_server'), 'config', 'filters.yaml')
-    #nav2_apps = get_package_share_directory('nav2_apps')
 
     DeclareLaunchArgument(
         'sim_time',
@@ -32,22 +30,6 @@ def generate_launch_description():
             executable='approach_service_server',
             name='approach_shelf_service',
             output='screen'),
-
-        Node(
-            package='nav2_map_server',
-            executable='map_server',
-            name='filter_mask_server',
-            output='screen',
-            emulate_tty=True,
-            parameters=[filters_yaml]),
-
-        Node(
-            package='nav2_map_server',
-            executable='costmap_filter_info_server',
-            name='costmap_filter_info_server',
-            output='screen',
-            emulate_tty=True,
-            parameters=[filters_yaml]),
 
         Node(
             package='nav2_controller',
@@ -89,7 +71,5 @@ def generate_launch_description():
                         {'node_names': ['planner_server',
                                         'controller_server',
                                         'nav2_behaviors',
-                                        'bt_navigator',
-                                        'filter_mask_server',
-                                        'costmap_filter_info_server']}])
+                                        'bt_navigator']}])
     ])

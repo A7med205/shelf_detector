@@ -65,7 +65,6 @@ endif()
 
 install(DIRECTORY
   scripts
-  config
   DESTINATION share/${PROJECT_NAME}/
 )
 
