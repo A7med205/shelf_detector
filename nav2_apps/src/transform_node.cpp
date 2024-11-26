@@ -2,7 +2,7 @@
 #include "nav_msgs/msg/odometry.hpp"
 #include "sensor_msgs/msg/laser_scan.hpp"
 #include "std_msgs/msg/string.hpp"
-#include <algorithm> // For std::max
+#include <algorithm>
 #include <chrono>
 #include <cmath>
 #include <geometry_msgs/msg/point.hpp>
@@ -59,29 +59,20 @@ private:
       const std::shared_ptr<nav2_apps::srv::GoToLoading::Request> request,
       std::shared_ptr<nav2_apps::srv::GoToLoading::Response> response) {
     RCLCPP_INFO(this->get_logger(), "Service called");
-
     if (request->attach_to_shelf) {
-      RCLCPP_INFO(this->get_logger(), "Starting alignment with cart");
-      // Detecting cart and started approach if detected
-      if (std::abs(leg_distance_ - 0.7) < 0.1) {
-        approach = "align";
-        while (!success) {
-          if (success) {
-            break;
-          }
+      RCLCPP_INFO(this->get_logger(), "Orienting towards furthest leg");
+      approach = "orient";
+      while (!success) {
+        if (success) {
+          break;
         }
-        response->complete = true;
-        rclcpp::shutdown();
-      } else {
-        response->complete = false;
-        rclcpp::shutdown();
       }
+      response->complete = true;
+      rclcpp::shutdown();
     }
-    rclcpp::shutdown();
   }
 
   void scan_callback(const sensor_msgs::msg::LaserScan::SharedPtr msg) {
-    double angle1, angle2;
     b = c = 0;
     // Scanning intensities from left side
     for (size_t i = 0; i < msg->intensities.size(); i += 2) {
@@ -101,51 +92,6 @@ private:
       }
     }
 
-    /////////////////////////////////////////////////////////////////////////////
-    if (c > b) {
-      if (angle1 < 0 && angle2 < 0) {
-        double al_ = abs(angle1); // left angle
-        double ar_ = abs(angle2); // right angle
-        double a1 = al_ - ar_;    // between
-
-        double A = sqrt(b * b + c * c - 2 * b * c * cos(a1)); // Leg
-        double X_ = asin((b * sin(a1)) / A);                  // First angle
-        double X__ = M_PI - a1 - X_;                          // Second angle
-        double X1 = std::min(X_, X__); // whichever is smaller
-
-        double X2 = M_PI / 2 - X1;
-        double X3 = M_PI - (al_);
-        th_w = X2 + X3; //  difference
-      }
-      if (angle1 < 0 && angle2 > 0) {
-        double al_ = abs(angle1); // left angle
-        double ar_ = abs(angle2); // right angle
-        double a1 = al_ + ar_;    // between
-
-        double A = sqrt(b * b + c * c - 2 * b * c * cos(a1)); // Leg
-        double X_ = asin((b * sin(a1)) / A);                  // First angle
-        double X__ = M_PI - a1 - X_;                          // Second angle
-        double X1 = std::max(X_, X__); // whichever is smaller
-
-        double X2 = M_PI - (ar_ + X1);
-        th_w = M_PI / 2 - X2; //  difference
-      }
-      if (angle1 > 0 && angle2 > 0) {
-        double al_ = abs(angle1); // left angle
-        double ar_ = abs(angle2); // right angle
-        double a1 = ar_;          // between
-
-        double A = sqrt(b * b + c * c - 2 * b * c * cos(a1)); // Leg
-        double X_ = asin((b * sin(a1)) / A);                  // First angle
-        double X__ = M_PI - a1 - X_;                          // Second angle
-        double X1 = std::min(X_, X__); // whichever is smaller
-
-        double X2 = M_PI / 2 - X1;
-        th_w = M_PI + X2 + al_; //  difference
-      }
-    }
-    /////////////////////////////////////////////////////////////////////////////
-
     laser_angle = angle2;
     theta = std::abs(angle1 - angle2);
 
@@ -154,26 +100,6 @@ private:
   }
 
   void odom_callback(const nav_msgs::msg::Odometry::SharedPtr msg) {
-    // Getting yaw
-    tf2::Quaternion q1(
-        msg->pose.pose.orientation.x, msg->pose.pose.orientation.y,
-        msg->pose.pose.orientation.z, msg->pose.pose.orientation.w);
-    tf2::Matrix3x3 m(q1);
-    double roll, pitch, yaw_;
-    m.getRPY(roll, pitch, yaw_);
-
-    tf2::Quaternion q2;
-    q2.setRPY(0.0, 0.0, -th_w);
-
-    tf2::Quaternion q3 = q1 * q2;
-
-    /*counter_ += 1;
-    if (counter_ % 10 == 0) {
-      RCLCPP_INFO(this->get_logger(), "OG Z is %.2f, OG W is %.2f",
-                  msg->pose.pose.orientation.z, msg->pose.pose.orientation.w);
-      RCLCPP_INFO(this->get_logger(), "NEW Z is %.2f, NEW W is %.2f", q2.z(),
-                  q2.w());
-    }*/
     // Coordinates of points B and C
     double xC = 0.0;
     double yC = c;
@@ -204,85 +130,73 @@ private:
 
     t.transform.rotation.x = 0.0;
     t.transform.rotation.y = 0.0;
-    t.transform.rotation.z = q3.z();
-    t.transform.rotation.w = q3.w();
+    t.transform.rotation.z = 0.0;
+    t.transform.rotation.w = 1.0;
 
     tf_broadcaster_->sendTransform(t);
 
-    //////////TEST//////////
-    geometry_msgs::msg::TransformStamped t_2;
-    t_2.header.stamp = this->get_clock()->now();
-    t_2.header.frame_id = "cart_frame";
-    t_2.child_frame_id = "cart_frame_2";
-
-    t_2.transform.translation.x = 0.0;
-    t_2.transform.translation.y = -0.5;
-    t_2.transform.translation.z = 0.0;
-
-    t_2.transform.rotation.x = 0.0;
-    t_2.transform.rotation.y = 0.0;
-    t_2.transform.rotation.z = 0.0;
-    t_2.transform.rotation.w = 1.0;
-
-    tf_broadcaster_->sendTransform(t_2);
-    //////////TEST//////////
-
-    // Aligning with cart
-    if (approach == "align") {
+    // Rotating towards furthest leg
+    if (approach == "orient") {
       control = true;
-      error_yaw = -std::atan2(yM2, xM2);
-      error_distance = std::sqrt(std::pow(yM2, 2) + std::pow(xM2, 2));
+      if (std::max(b, c) == c) {
+        error_yaw = -angle2;
+      } else {
+        error_yaw = -angle1;
+      }
+      if (std::abs(error_yaw) > 0.1) {
+        xx = 0.0;
+        zz = 0.5 * error_yaw;
+      } else {
+        approach = "to_leg";
+        RCLCPP_INFO(this->get_logger(), "Moving towards furthest leg");
+        xx = zz = 0.0;
+      }
+    }
+
+    // Moving towards furthest leg
+    if (approach == "to_leg") {
+      // error_yaw = -std::atan2(yM2, xM2);
+      // error_distance = std::sqrt(std::pow(yM2, 2) + std::pow(xM2, 2));
+      if (std::max(b, c) == c) {
+        error_yaw = -angle2;
+        error_distance = c - b;
+      } else {
+        error_yaw = -angle1;
+        error_distance = b - c;
+      }
       if (error_distance > 0.01) {
         xx = 0.1;
-        zz = 0.2 * error_yaw;
+        zz = 0.5 * error_yaw;
       } else {
-        approach = "forward";
-        start_time = this->get_clock()->now();
-      }
-    }
-
-    if ((approach == "forward")) {
-      xx = 0.1;
-      zz = 0.0;
-      auto current_time = this->get_clock()->now();
-      auto time_diff = current_time - start_time;
-      double seconds = time_diff.seconds();
-      if (seconds > 6.0) {
+        approach = "link";
+        RCLCPP_INFO(this->get_logger(),
+                    "Starting correcting for laser link position");
         xx = zz = 0.0;
-        x1 = msg->pose.pose.position.x;
+        x1 = msg->pose.pose.position.x; // Accounting for laser link
         y1 = msg->pose.pose.position.y;
-        // approach = "lift";
-        approach = "end";
+        // start_time = this->get_clock()->now();
       }
     }
 
-    if (approach == "lift") {
+    if ((approach == "link")) {
+      error_distance = std::sqrt(std::pow(x1 - msg->pose.pose.position.x, 2) +
+                                 std::pow(y1 - msg->pose.pose.position.y, 2));
+      if (error_distance < 0.20) {
+        xx = 0.1;
+        zz = 0.0;
+      } else {
+        approach = "end";
+        xx = zz = 0.0;
+      }
+    }
+
+    /*if (approach == "lift") {
       auto elevator_msg = std_msgs::msg::String();
       elevator_publisher->publish(elevator_msg);
       start_time = this->get_clock()->now();
       RCLCPP_INFO(this->get_logger(), "Lifting cart");
       approach = "wait";
-    }
-
-    if (approach == "wait") {
-      auto current_time = this->get_clock()->now();
-      auto time_diff = current_time - start_time;
-      double seconds = time_diff.seconds();
-      if (seconds > 6.0) {
-        approach = "drive_back";
-        RCLCPP_INFO(this->get_logger(), "Driving back");
-      }
-    }
-
-    if (approach == "drive_back") {
-      xx = -0.2;
-      double dx = msg->pose.pose.position.x - x1;
-      double dy = msg->pose.pose.position.y - y1;
-      double distance = sqrt(dx * dx + dy * dy);
-      if (distance > 0.65) {
-        approach = "end";
-      }
-    }
+    }*/
 
     if (control) {
       auto vel_msg = geometry_msgs::msg::Twist();
@@ -310,6 +224,7 @@ private:
 
   double leg_distance_;
   double b, c, theta, laser_angle;
+  double angle1, angle2;
   double intensity_threshold;
   double error_yaw, error_distance, xx, zz;
   double x1, y1;
@@ -317,8 +232,6 @@ private:
   std::string approach;
   bool success;
   bool control;
-  double th_w;
-  int counter_;
 };
 
 int main(int argc, char *argv[]) {
