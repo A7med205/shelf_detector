@@ -2,6 +2,7 @@
 #include "nav_msgs/msg/odometry.hpp"
 #include "sensor_msgs/msg/laser_scan.hpp"
 #include "std_msgs/msg/string.hpp"
+#include <algorithm> // For std::max
 #include <chrono>
 #include <cmath>
 #include <geometry_msgs/msg/point.hpp>
@@ -83,22 +84,67 @@ private:
     double angle1, angle2;
     b = c = 0;
     // Scanning intensities from left side
-    for (size_t i = 0; i < msg->intensities.size(); ++i) {
+    for (size_t i = 0; i < msg->intensities.size(); i += 2) {
       if (msg->intensities[i] > intensity_threshold) {
         angle1 = msg->angle_min + i * msg->angle_increment;
-        b = msg->ranges[i];
+        b = msg->ranges[i]; // long
         break;
       }
     }
 
     // Scanning intensities from right side
-    for (int i = msg->intensities.size() - 1; i >= 0; --i) {
+    for (int i = msg->intensities.size() - 1; i >= 0; i -= 2) {
       if (msg->intensities[i] > intensity_threshold) {
         angle2 = msg->angle_min + i * msg->angle_increment;
-        c = msg->ranges[i];
+        c = msg->ranges[i]; // short
         break;
       }
     }
+
+    /////////////////////////////////////////////////////////////////////////////
+    if (c > b) {
+      if (angle1 < 0 && angle2 < 0) {
+        double al_ = abs(angle1); // left angle
+        double ar_ = abs(angle2); // right angle
+        double a1 = al_ - ar_;    // between
+
+        double A = sqrt(b * b + c * c - 2 * b * c * cos(a1)); // Leg
+        double X_ = asin((b * sin(a1)) / A);                  // First angle
+        double X__ = M_PI - a1 - X_;                          // Second angle
+        double X1 = std::min(X_, X__); // whichever is smaller
+
+        double X2 = M_PI / 2 - X1;
+        double X3 = M_PI - (al_);
+        th_w = X2 + X3; //  difference
+      }
+      if (angle1 < 0 && angle2 > 0) {
+        double al_ = abs(angle1); // left angle
+        double ar_ = abs(angle2); // right angle
+        double a1 = al_ + ar_;    // between
+
+        double A = sqrt(b * b + c * c - 2 * b * c * cos(a1)); // Leg
+        double X_ = asin((b * sin(a1)) / A);                  // First angle
+        double X__ = M_PI - a1 - X_;                          // Second angle
+        double X1 = std::max(X_, X__); // whichever is smaller
+
+        double X2 = M_PI - (ar_ + X1);
+        th_w = M_PI / 2 - X2; //  difference
+      }
+      if (angle1 > 0 && angle2 > 0) {
+        double al_ = abs(angle1); // left angle
+        double ar_ = abs(angle2); // right angle
+        double a1 = ar_;          // between
+
+        double A = sqrt(b * b + c * c - 2 * b * c * cos(a1)); // Leg
+        double X_ = asin((b * sin(a1)) / A);                  // First angle
+        double X__ = M_PI - a1 - X_;                          // Second angle
+        double X1 = std::min(X_, X__); // whichever is smaller
+
+        double X2 = M_PI / 2 - X1;
+        th_w = M_PI + X2 + al_; //  difference
+      }
+    }
+    /////////////////////////////////////////////////////////////////////////////
 
     laser_angle = angle2;
     theta = std::abs(angle1 - angle2);
@@ -109,13 +155,23 @@ private:
 
   void odom_callback(const nav_msgs::msg::Odometry::SharedPtr msg) {
     // Getting yaw
-    // tf2::Quaternion q(
-    //    msg->pose.pose.orientation.x, msg->pose.pose.orientation.y,
-    //    msg->pose.pose.orientation.z, msg->pose.pose.orientation.w);
-    // tf2::Matrix3x3 m(q);
-    // double roll, pitch, yaw_;
-    // m.getRPY(roll, pitch, yaw_);
+    tf2::Quaternion q(
+        msg->pose.pose.orientation.x, msg->pose.pose.orientation.y,
+        msg->pose.pose.orientation.z, msg->pose.pose.orientation.w);
+    tf2::Matrix3x3 m(q);
+    double roll, pitch, yaw_;
+    m.getRPY(roll, pitch, yaw_);
 
+    tf2::Quaternion q2;
+    q2.setRPY(0.0, 0.0, -th_w / 2);
+
+    /*counter_ += 1;
+    if (counter_ % 10 == 0) {
+      RCLCPP_INFO(this->get_logger(), "OG Z is %.2f, OG W is %.2f",
+                  msg->pose.pose.orientation.z, msg->pose.pose.orientation.w);
+      RCLCPP_INFO(this->get_logger(), "NEW Z is %.2f, NEW W is %.2f", q2.z(),
+                  q2.w());
+    }*/
     // Coordinates of points B and C
     double xC = 0.0;
     double yC = c;
@@ -128,9 +184,9 @@ private:
 
     // Rotating coordinates to account for laser beam angle relative to robot
     double yM2 =
-        yM * cos(1.57079 - laser_angle) - xM * sin(1.57079 - laser_angle);
+        yM * cos(M_PI / 2 - laser_angle) - xM * sin(M_PI / 2 - laser_angle);
     double xM2 =
-        yM * sin(1.57079 - laser_angle) + xM * cos(1.57079 - laser_angle);
+        yM * sin(M_PI / 2 - laser_angle) + xM * cos(M_PI / 2 - laser_angle);
 
     double angle_AM = std::atan2(yM2, xM2);
 
@@ -146,8 +202,8 @@ private:
 
     t.transform.rotation.x = 0.0;
     t.transform.rotation.y = 0.0;
-    t.transform.rotation.z = -msg->pose.pose.orientation.z;
-    t.transform.rotation.w = msg->pose.pose.orientation.w;
+    t.transform.rotation.z = q2.z();
+    t.transform.rotation.w = q2.w();
 
     tf_broadcaster_->sendTransform(t);
 
@@ -157,7 +213,7 @@ private:
     t_2.header.frame_id = "cart_frame";
     t_2.child_frame_id = "cart_frame_2";
 
-    t_2.transform.translation.x = -0.5;
+    t_2.transform.translation.x = +0.5;
     t_2.transform.translation.y = 0.0;
     t_2.transform.translation.z = 0.0;
 
@@ -259,6 +315,8 @@ private:
   std::string approach;
   bool success;
   bool control;
+  double th_w;
+  int counter_;
 };
 
 int main(int argc, char *argv[]) {
