@@ -52,6 +52,7 @@ public:
         this->create_publisher<std_msgs::msg::String>("/elevator_up", 10);
     leg_distance_ = 0.0;
     intensity_threshold = 2000;
+    step_ = 0;
   }
 
 private:
@@ -61,7 +62,7 @@ private:
     RCLCPP_INFO(this->get_logger(), "Service called");
     if (request->attach_to_shelf) {
       RCLCPP_INFO(this->get_logger(), "Orienting towards furthest leg");
-      approach = "orient";
+      step_ = 1;
       while (!success) {
         if (success) {
           break;
@@ -135,8 +136,9 @@ private:
 
     tf_broadcaster_->sendTransform(t);
 
+    switch (step_) {
     // Rotating towards furthest leg
-    if (approach == "orient") {
+    case 1: {
       control = true;
       if (std::max(b, c) == c) {
         error_yaw = -angle2;
@@ -147,16 +149,15 @@ private:
         xx = 0.0;
         zz = 0.5 * error_yaw;
       } else {
-        approach = "to_leg";
+        step_ = 2; // Next step
         RCLCPP_INFO(this->get_logger(), "Moving towards furthest leg");
         xx = zz = 0.0;
       }
+      break;
     }
 
     // Moving towards furthest leg
-    if (approach == "to_leg") {
-      // error_yaw = -std::atan2(yM2, xM2);
-      // error_distance = std::sqrt(std::pow(yM2, 2) + std::pow(xM2, 2));
+    case 2: {
       if (std::max(b, c) == c) {
         error_yaw = -angle2;
         error_distance = c - b;
@@ -168,26 +169,33 @@ private:
         xx = 0.1;
         zz = 0.5 * error_yaw;
       } else {
-        approach = "link";
+        step_ = 3; // Next step
         RCLCPP_INFO(this->get_logger(),
                     "Starting correcting for laser link position");
         xx = zz = 0.0;
-        x1 = msg->pose.pose.position.x; // Accounting for laser link
+        x1 = msg->pose.pose.position.x;
         y1 = msg->pose.pose.position.y;
-        // start_time = this->get_clock()->now();
       }
+      break;
     }
 
-    if ((approach == "link")) {
+    // Correcting for laser link position
+    case 3: {
       error_distance = std::sqrt(std::pow(x1 - msg->pose.pose.position.x, 2) +
                                  std::pow(y1 - msg->pose.pose.position.y, 2));
       if (error_distance < 0.20) {
         xx = 0.1;
         zz = 0.0;
       } else {
-        approach = "end";
+        step_ = 4; // Next step
         xx = zz = 0.0;
       }
+      break;
+    }
+
+    // Default case
+    default:
+      break;
     }
 
     /*if (approach == "lift") {
@@ -203,7 +211,7 @@ private:
       vel_msg.linear.x = xx;
       vel_msg.angular.z = zz;
       cmd_vel_publisher->publish(vel_msg);
-      if (approach == "end") {
+      if (step_ == 4) {
         control = false;
         RCLCPP_INFO(this->get_logger(), "Finished attachment with cart");
         success = true;
@@ -228,8 +236,8 @@ private:
   double intensity_threshold;
   double error_yaw, error_distance, xx, zz;
   double x1, y1;
+  int step_;
   rclcpp::Time start_time, end_time;
-  std::string approach;
   bool success;
   bool control;
 };
