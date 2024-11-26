@@ -155,15 +155,17 @@ private:
 
   void odom_callback(const nav_msgs::msg::Odometry::SharedPtr msg) {
     // Getting yaw
-    tf2::Quaternion q(
+    tf2::Quaternion q1(
         msg->pose.pose.orientation.x, msg->pose.pose.orientation.y,
         msg->pose.pose.orientation.z, msg->pose.pose.orientation.w);
-    tf2::Matrix3x3 m(q);
+    tf2::Matrix3x3 m(q1);
     double roll, pitch, yaw_;
     m.getRPY(roll, pitch, yaw_);
 
     tf2::Quaternion q2;
-    q2.setRPY(0.0, 0.0, -th_w / 2);
+    q2.setRPY(0.0, 0.0, -th_w);
+
+    tf2::Quaternion q3 = q1 * q2;
 
     /*counter_ += 1;
     if (counter_ % 10 == 0) {
@@ -202,8 +204,8 @@ private:
 
     t.transform.rotation.x = 0.0;
     t.transform.rotation.y = 0.0;
-    t.transform.rotation.z = q2.z();
-    t.transform.rotation.w = q2.w();
+    t.transform.rotation.z = q3.z();
+    t.transform.rotation.w = q3.w();
 
     tf_broadcaster_->sendTransform(t);
 
@@ -213,8 +215,8 @@ private:
     t_2.header.frame_id = "cart_frame";
     t_2.child_frame_id = "cart_frame_2";
 
-    t_2.transform.translation.x = +0.5;
-    t_2.transform.translation.y = 0.0;
+    t_2.transform.translation.x = 0.0;
+    t_2.transform.translation.y = -0.5;
     t_2.transform.translation.z = 0.0;
 
     t_2.transform.rotation.x = 0.0;
