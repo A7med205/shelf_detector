@@ -105,7 +105,6 @@ private:
   }
 
   void odom_callback(const nav_msgs::msg::Odometry::SharedPtr msg) {
-
     // Coordinates of points B and C
     double xC = 0.0;
     double yC = c;
@@ -142,28 +141,32 @@ private:
     tf_broadcaster_->sendTransform(t);
 
     // Aligning with cart
-    error_yaw = -std::atan2(yM2, xM2);
-    error_distance = std::sqrt(std::pow(yM2, 2) + std::pow(xM2, 2));
-
-    auto vel_msg = geometry_msgs::msg::Twist();
     if (approach == "align") {
       control = true;
-      if (error_distance > 0.02) {
-        xx = 0.2 * error_distance + 0.1;
-        zz = 0.3 * error_yaw;
+      error_yaw = -std::atan2(yM2, xM2);
+      error_distance = std::sqrt(std::pow(yM2, 2) + std::pow(xM2, 2));
+      if (error_distance > 0.01) {
+        xx = 0.1;
+        zz = 0.2 * error_yaw;
       } else {
         approach = "forward";
+        start_time = this->get_clock()->now();
       }
     }
 
-    if ((approach == "forward") && (error_distance < 0.45)) {
-      xx = 0.2;
+    if ((approach == "forward")) {
+      xx = 0.1;
       zz = 0.0;
-    } else if ((approach == "forward") && (error_distance > 0.45)) {
-      xx = zz = 0.0;
-      x1 = msg->pose.pose.position.x;
-      y1 = msg->pose.pose.position.y;
-      approach = "lift";
+      auto current_time = this->get_clock()->now();
+      auto time_diff = current_time - start_time;
+      double seconds = time_diff.seconds();
+      if (seconds > 6.0) {
+        xx = zz = 0.0;
+        x1 = msg->pose.pose.position.x;
+        y1 = msg->pose.pose.position.y;
+        // approach = "lift";
+        approach = "end";
+      }
     }
 
     if (approach == "lift") {
@@ -175,10 +178,10 @@ private:
     }
 
     if (approach == "wait") {
-      end_time = this->get_clock()->now();
-      auto time_diff = end_time - start_time;
+      auto current_time = this->get_clock()->now();
+      auto time_diff = current_time - start_time;
       double seconds = time_diff.seconds();
-      if (seconds > 3.0) {
+      if (seconds > 6.0) {
         approach = "drive_back";
         RCLCPP_INFO(this->get_logger(), "Driving back");
       }
@@ -195,6 +198,7 @@ private:
     }
 
     if (control) {
+      auto vel_msg = geometry_msgs::msg::Twist();
       vel_msg.linear.x = xx;
       vel_msg.angular.z = zz;
       cmd_vel_publisher->publish(vel_msg);

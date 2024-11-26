@@ -8,13 +8,15 @@
 #include <geometry_msgs/msg/transform_stamped.hpp>
 #include <nav2_apps/srv/go_to_loading.hpp>
 #include <rclcpp/rclcpp.hpp>
+#include <tf2/LinearMath/Matrix3x3.h>
+#include <tf2/LinearMath/Quaternion.h>
 #include <tf2_ros/transform_broadcaster.h>
 
 class ApproachService : public rclcpp::Node {
 public:
-  ApproachService() : Node("approach_shelf_service") {
+  ApproachService() : Node("transform_node") {
 
-    RCLCPP_INFO(this->get_logger(), "Service running.");
+    RCLCPP_INFO(this->get_logger(), "Transform node running.");
     // Callback groups
     service_callback_group_ = this->create_callback_group(
         rclcpp::CallbackGroupType::MutuallyExclusive);
@@ -43,8 +45,8 @@ public:
         std::bind(&ApproachService::odom_callback, this, std::placeholders::_1),
         options2);
     tf_broadcaster_ = std::make_shared<tf2_ros::TransformBroadcaster>(this);
-    cmd_vel_publisher =
-        this->create_publisher<geometry_msgs::msg::Twist>("/cmd_vel", 10);
+    cmd_vel_publisher = this->create_publisher<geometry_msgs::msg::Twist>(
+        "/diffbot_base_controller/cmd_vel_unstamped", 10);
     elevator_publisher =
         this->create_publisher<std_msgs::msg::String>("/elevator_up", 10);
     leg_distance_ = 0.0;
@@ -60,7 +62,7 @@ private:
     if (request->attach_to_shelf) {
       RCLCPP_INFO(this->get_logger(), "Starting alignment with cart");
       // Detecting cart and started approach if detected
-      if (std::abs(leg_distance_) > 0.1) {
+      if (std::abs(leg_distance_ - 0.7) < 0.1) {
         approach = "align";
         while (!success) {
           if (success) {
@@ -82,7 +84,7 @@ private:
     b = c = 0;
     // Scanning intensities from left side
     for (size_t i = 0; i < msg->intensities.size(); ++i) {
-      if ((msg->intensities[i] > intensity_threshold) && (msg->ranges[i] < 1)) {
+      if (msg->intensities[i] > intensity_threshold) {
         angle1 = msg->angle_min + i * msg->angle_increment;
         b = msg->ranges[i];
         break;
@@ -91,12 +93,13 @@ private:
 
     // Scanning intensities from right side
     for (int i = msg->intensities.size() - 1; i >= 0; --i) {
-      if ((msg->intensities[i] > intensity_threshold) && (msg->ranges[i] < 1)) {
+      if (msg->intensities[i] > intensity_threshold) {
         angle2 = msg->angle_min + i * msg->angle_increment;
         c = msg->ranges[i];
         break;
       }
     }
+
     laser_angle = angle2;
     theta = std::abs(angle1 - angle2);
 
@@ -105,6 +108,13 @@ private:
   }
 
   void odom_callback(const nav_msgs::msg::Odometry::SharedPtr msg) {
+    // Getting yaw
+    // tf2::Quaternion q(
+    //    msg->pose.pose.orientation.x, msg->pose.pose.orientation.y,
+    //    msg->pose.pose.orientation.z, msg->pose.pose.orientation.w);
+    // tf2::Matrix3x3 m(q);
+    // double roll, pitch, yaw_;
+    // m.getRPY(roll, pitch, yaw_);
 
     // Coordinates of points B and C
     double xC = 0.0;
@@ -136,21 +146,34 @@ private:
 
     t.transform.rotation.x = 0.0;
     t.transform.rotation.y = 0.0;
-    t.transform.rotation.z = std::sin(angle_AM / 2);
-    t.transform.rotation.w = std::cos(angle_AM / 2);
+    t.transform.rotation.z = -msg->pose.pose.orientation.z;
+    t.transform.rotation.w = msg->pose.pose.orientation.w;
 
     tf_broadcaster_->sendTransform(t);
 
-    // Aligning with cart
-    error_yaw = -std::atan2(yM2, xM2);
-    if (std::abs(error_yaw) > 0.5) {
-      error_yaw = 0;
-    }
-    error_distance = std::sqrt(std::pow(yM2, 2) + std::pow(xM2, 2));
+    //////////TEST//////////
+    geometry_msgs::msg::TransformStamped t_2;
+    t_2.header.stamp = this->get_clock()->now();
+    t_2.header.frame_id = "cart_frame";
+    t_2.child_frame_id = "cart_frame_2";
 
-    auto vel_msg = geometry_msgs::msg::Twist();
+    t_2.transform.translation.x = -0.5;
+    t_2.transform.translation.y = 0.0;
+    t_2.transform.translation.z = 0.0;
+
+    t_2.transform.rotation.x = 0.0;
+    t_2.transform.rotation.y = 0.0;
+    t_2.transform.rotation.z = 0.0;
+    t_2.transform.rotation.w = 1.0;
+
+    tf_broadcaster_->sendTransform(t_2);
+    //////////TEST//////////
+
+    // Aligning with cart
     if (approach == "align") {
       control = true;
+      error_yaw = -std::atan2(yM2, xM2);
+      error_distance = std::sqrt(std::pow(yM2, 2) + std::pow(xM2, 2));
       if (error_distance > 0.01) {
         xx = 0.1;
         zz = 0.2 * error_yaw;
@@ -163,14 +186,15 @@ private:
     if ((approach == "forward")) {
       xx = 0.1;
       zz = 0.0;
-      current_time = this->get_clock()->now();
+      auto current_time = this->get_clock()->now();
       auto time_diff = current_time - start_time;
       double seconds = time_diff.seconds();
       if (seconds > 6.0) {
         xx = zz = 0.0;
         x1 = msg->pose.pose.position.x;
         y1 = msg->pose.pose.position.y;
-        approach = "lift";
+        // approach = "lift";
+        approach = "end";
       }
     }
 
@@ -183,7 +207,7 @@ private:
     }
 
     if (approach == "wait") {
-      current_time = this->get_clock()->now();
+      auto current_time = this->get_clock()->now();
       auto time_diff = current_time - start_time;
       double seconds = time_diff.seconds();
       if (seconds > 6.0) {
@@ -203,6 +227,7 @@ private:
     }
 
     if (control) {
+      auto vel_msg = geometry_msgs::msg::Twist();
       vel_msg.linear.x = xx;
       vel_msg.angular.z = zz;
       cmd_vel_publisher->publish(vel_msg);
@@ -230,7 +255,7 @@ private:
   double intensity_threshold;
   double error_yaw, error_distance, xx, zz;
   double x1, y1;
-  rclcpp::Time start_time, current_time;
+  rclcpp::Time start_time, end_time;
   std::string approach;
   bool success;
   bool control;
