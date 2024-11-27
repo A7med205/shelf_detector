@@ -52,7 +52,7 @@ public:
         this->create_publisher<std_msgs::msg::String>("/elevator_up", 10);
     leg_distance_ = 0.0;
     intensity_threshold = 2000;
-    step_ = 0;
+    step_ = counter_ = 0;
   }
 
 private:
@@ -117,8 +117,6 @@ private:
     double xM2 =
         yM * sin(M_PI / 2 - laser_angle) + xM * cos(M_PI / 2 - laser_angle);
 
-    double angle_AM = std::atan2(yM2, xM2);
-
     // Creating transform
     geometry_msgs::msg::TransformStamped t;
     t.header.stamp = this->get_clock()->now();
@@ -137,6 +135,15 @@ private:
     tf_broadcaster_->sendTransform(t);
 
     switch (step_) {
+
+    case 0: {
+      if (counter_ % 10 == 0) {
+        RCLCPP_INFO(this->get_logger(), "Angle is %.2f, Distance is %.2f",
+                    theta, std::sqrt(std::pow(xM2, 2) + std::pow(yM2, 2)));
+      }
+      counter_ += 1;
+      break;
+    }
     // Rotating towards furthest leg
     case 1: {
       control = true;
@@ -189,6 +196,63 @@ private:
       } else {
         step_ = 4; // Next step
         xx = zz = 0.0;
+        RCLCPP_INFO(this->get_logger(), "Rotating towards TF");
+      }
+      break;
+    }
+
+    // Orienting towards TF
+    case 4: {
+      error_yaw = -std::atan2(yM2, xM2);
+      if (std::abs(error_yaw) > 0.1) {
+        zz = 0.5 * error_yaw;
+      } else {
+        step_ = 5; // Next step
+        xx = zz = 0.0;
+        RCLCPP_INFO(this->get_logger(), "Moving towards TF");
+      }
+      break;
+    }
+
+    // Moving towards TF
+    case 5: {
+      error_yaw = -std::atan2(yM2, xM2);
+      error_distance = std::sqrt(std::pow(xM2, 2) + std::pow(yM2, 2));
+      if (error_distance > 0.2) {
+        zz = 0.5 * error_yaw;
+        xx = 0.1;
+      } else {
+        step_ = 6; // Next step
+        xx = zz = 0.0;
+        RCLCPP_INFO(this->get_logger(), "Starting final alignment");
+      }
+      break;
+    }
+
+      // Final alignment
+    case 6: {
+      error_yaw = -std::atan2(yM2, xM2);
+      if (std::abs(error_yaw) > 0.1) {
+        zz = 0.5 * error_yaw;
+      } else {
+        step_ = 7; // Next step
+        xx = zz = 0.0;
+        RCLCPP_INFO(this->get_logger(), "Moving forward using /odom");
+        x1 = msg->pose.pose.position.x;
+        y1 = msg->pose.pose.position.y;
+      }
+      break;
+    }
+      // Odom docking before lift
+    case 7: {
+      error_distance = std::sqrt(std::pow(x1 - msg->pose.pose.position.x, 2) +
+                                 std::pow(y1 - msg->pose.pose.position.y, 2));
+      if (error_distance < 0.8) {
+        xx = 0.1;
+        zz = 0.0;
+      } else {
+        step_ = 8; // Next step
+        xx = zz = 0.0;
       }
       break;
     }
@@ -211,7 +275,7 @@ private:
       vel_msg.linear.x = xx;
       vel_msg.angular.z = zz;
       cmd_vel_publisher->publish(vel_msg);
-      if (step_ == 4) {
+      if (step_ == 8) {
         control = false;
         RCLCPP_INFO(this->get_logger(), "Finished attachment with cart");
         success = true;
@@ -236,7 +300,7 @@ private:
   double intensity_threshold;
   double error_yaw, error_distance, xx, zz;
   double x1, y1;
-  int step_;
+  int step_, counter_;
   rclcpp::Time start_time, end_time;
   bool success;
   bool control;
