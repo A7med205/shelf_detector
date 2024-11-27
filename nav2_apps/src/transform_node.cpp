@@ -31,6 +31,21 @@ public:
     rclcpp::SubscriptionOptions options2;
     options2.callback_group = odom_callback_group_;
 
+    // Robot parameters
+    auto param_desc = rcl_interfaces::msg::ParameterDescriptor{};
+    param_desc.description = "Sets the sim/real mode";
+    this->declare_parameter<int>("mode", 0.0, param_desc);
+    this->get_parameter("mode", mode_param);
+    if (mode_param == 0) {
+      vel_topic = "diffbot_base_controller/cmd_vel_unstamped";
+      laser_link = 0.20;
+      dock_dis = 0.8;
+    } else {
+      vel_topic = "/cmd_vel";
+      laser_link = 0.23;
+      dock_dis = 0.65;
+    }
+
     // Services, subscribers, and publishers
     service_ = this->create_service<nav2_apps::srv::GoToLoading>(
         "approach_shelf",
@@ -46,8 +61,8 @@ public:
         std::bind(&ApproachService::odom_callback, this, std::placeholders::_1),
         options2);
     tf_broadcaster_ = std::make_shared<tf2_ros::TransformBroadcaster>(this);
-    cmd_vel_publisher = this->create_publisher<geometry_msgs::msg::Twist>(
-        "/diffbot_base_controller/cmd_vel_unstamped", 10);
+    cmd_vel_publisher =
+        this->create_publisher<geometry_msgs::msg::Twist>(vel_topic, 10);
     elevator_publisher =
         this->create_publisher<std_msgs::msg::String>("/elevator_up", 10);
     leg_distance_ = 0.0;
@@ -77,7 +92,7 @@ private:
     b = c = 0;
     // Scanning intensities from left side
     for (size_t i = 0; i < msg->intensities.size(); i += 2) {
-      if (msg->intensities[i] > intensity_threshold) {
+      if (msg->intensities[i] > intensity_threshold && msg->ranges[i] < 2) {
         angle1 = msg->angle_min + i * msg->angle_increment;
         b = msg->ranges[i]; // long
         break;
@@ -86,18 +101,19 @@ private:
 
     // Scanning intensities from right side
     for (int i = msg->intensities.size() - 1; i >= 0; i -= 2) {
-      if (msg->intensities[i] > intensity_threshold) {
+      if (msg->intensities[i] > intensity_threshold && msg->ranges[i] < 2) {
         angle2 = msg->angle_min + i * msg->angle_increment;
         c = msg->ranges[i]; // short
         break;
       }
     }
 
-    laser_angle = angle2;
-    theta = std::abs(angle1 - angle2);
-
     // Confirming cart presence
+    theta = std::abs(angle1 - angle2);
     leg_distance_ = sqrt(c * c + b * b - 2 * c * b * cos(theta));
+    if (leg_distance_ < 0.4 || leg_distance_ > 0.8) {
+      b = c = 0.0;
+    }
   }
 
   void odom_callback(const nav_msgs::msg::Odometry::SharedPtr msg) {
@@ -112,10 +128,8 @@ private:
     double yM = (yB + yC) / 2.0;
 
     // Rotating coordinates to account for laser beam angle relative to robot
-    double yM2 =
-        yM * cos(M_PI / 2 - laser_angle) - xM * sin(M_PI / 2 - laser_angle);
-    double xM2 =
-        yM * sin(M_PI / 2 - laser_angle) + xM * cos(M_PI / 2 - laser_angle);
+    double yM2 = yM * cos(M_PI / 2 - angle2) - xM * sin(M_PI / 2 - angle2);
+    double xM2 = yM * sin(M_PI / 2 - angle2) + xM * cos(M_PI / 2 - angle2);
 
     // Creating transform
     geometry_msgs::msg::TransformStamped t;
@@ -138,12 +152,15 @@ private:
 
     case 0: {
       if (counter_ % 10 == 0) {
-        RCLCPP_INFO(this->get_logger(), "Angle is %.2f, Distance is %.2f",
-                    theta, std::sqrt(std::pow(xM2, 2) + std::pow(yM2, 2)));
+        RCLCPP_INFO(this->get_logger(),
+                    "Angle is %.2f, Distance is %.2f, Mode is %d, Leg is %.2f",
+                    theta, std::sqrt(std::pow(xM2, 2) + std::pow(yM2, 2)),
+                    mode_param, leg_distance_);
       }
       counter_ += 1;
       break;
     }
+
     // Rotating towards furthest leg
     case 1: {
       control = true;
@@ -152,7 +169,7 @@ private:
       } else {
         error_yaw = -angle1;
       }
-      if (std::abs(error_yaw) > 0.1) {
+      if (std::abs(error_yaw) > 0.15) {
         xx = 0.0;
         zz = 0.5 * error_yaw;
       } else {
@@ -190,7 +207,7 @@ private:
     case 3: {
       error_distance = std::sqrt(std::pow(x1 - msg->pose.pose.position.x, 2) +
                                  std::pow(y1 - msg->pose.pose.position.y, 2));
-      if (error_distance < 0.20) {
+      if (error_distance < laser_link) {
         xx = 0.1;
         zz = 0.0;
       } else {
@@ -218,7 +235,7 @@ private:
     case 5: {
       error_yaw = -std::atan2(yM2, xM2);
       error_distance = std::sqrt(std::pow(xM2, 2) + std::pow(yM2, 2));
-      if (error_distance > 0.2) {
+      if (error_distance > 0.15) {
         zz = 0.5 * error_yaw;
         xx = 0.1;
       } else {
@@ -247,7 +264,7 @@ private:
     case 7: {
       error_distance = std::sqrt(std::pow(x1 - msg->pose.pose.position.x, 2) +
                                  std::pow(y1 - msg->pose.pose.position.y, 2));
-      if (error_distance < 0.8) {
+      if (error_distance < dock_dis) {
         xx = 0.1;
         zz = 0.0;
       } else {
@@ -283,6 +300,7 @@ private:
     }
   }
 
+  // Callback groups
   rclcpp::CallbackGroup::SharedPtr service_callback_group_;
   rclcpp::CallbackGroup::SharedPtr scan_callback_group_;
   rclcpp::CallbackGroup::SharedPtr odom_callback_group_;
@@ -294,8 +312,9 @@ private:
   rclcpp::Publisher<geometry_msgs::msg::Twist>::SharedPtr cmd_vel_publisher;
   rclcpp::Publisher<std_msgs::msg::String>::SharedPtr elevator_publisher;
 
+  // Main variables
   double leg_distance_;
-  double b, c, theta, laser_angle;
+  double b, c, theta;
   double angle1, angle2;
   double intensity_threshold;
   double error_yaw, error_distance, xx, zz;
@@ -304,6 +323,12 @@ private:
   rclcpp::Time start_time, end_time;
   bool success;
   bool control;
+
+  // Robot parameters
+  int mode_param;
+  std::string vel_topic;
+  double laser_link;
+  double dock_dis;
 };
 
 int main(int argc, char *argv[]) {
