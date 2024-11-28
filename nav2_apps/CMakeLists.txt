@@ -25,16 +25,7 @@ rosidl_generate_interfaces(${PROJECT_NAME}
   DEPENDENCIES
 )
 
-add_executable(approach_service_server src/approach_service_server.cpp)
 add_executable(transform_node src/transform_node.cpp)
-
-ament_target_dependencies(approach_service_server
-  rclcpp
-  geometry_msgs
-  nav_msgs
-  sensor_msgs
-  tf2_ros
-)
 
 ament_target_dependencies(transform_node
   rclcpp
@@ -46,9 +37,6 @@ ament_target_dependencies(transform_node
 )
 
 ament_export_dependencies(rosidl_default_runtime)
-
-rosidl_target_interfaces(approach_service_server
-  ${PROJECT_NAME} "rosidl_typesupport_cpp")
 
 rosidl_target_interfaces(transform_node
   ${PROJECT_NAME} "rosidl_typesupport_cpp")
@@ -71,7 +59,6 @@ install(DIRECTORY
 )
 
 install(TARGETS
-  approach_service_server
   transform_node
   DESTINATION lib/${PROJECT_NAME})
 

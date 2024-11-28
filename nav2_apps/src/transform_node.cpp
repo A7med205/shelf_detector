@@ -39,7 +39,7 @@ public:
     if (mode_param == 0) {
       vel_topic = "diffbot_base_controller/cmd_vel_unstamped";
       laser_link = 0.20;
-      dock_dis = 0.8;
+      dock_dis = 0.7;
     } else {
       vel_topic = "/cmd_vel";
       laser_link = 0.23;
@@ -152,10 +152,10 @@ private:
 
     case 0: {
       if (counter_ % 10 == 0) {
-        RCLCPP_INFO(this->get_logger(),
-                    "Angle is %.2f, Distance is %.2f, Mode is %d, Leg is %.2f",
-                    theta, std::sqrt(std::pow(xM2, 2) + std::pow(yM2, 2)),
-                    mode_param, leg_distance_);
+        RCLCPP_INFO(
+            this->get_logger(),
+            "\nAngle is %.2f\nNear distance is %.2f\nMode is %d\nLeg is %.2f",
+            theta, std::min(b, c), mode_param, leg_distance_);
       }
       counter_ += 1;
       break;
