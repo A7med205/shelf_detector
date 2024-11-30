@@ -34,7 +34,7 @@ public:
     // Robot parameters
     auto param_desc = rcl_interfaces::msg::ParameterDescriptor{};
     param_desc.description = "Sets the sim/real mode";
-    this->declare_parameter<int>("mode", 0.0, param_desc);
+    this->declare_parameter<int>("mode", 0, param_desc);
     this->get_parameter("mode", mode_param);
     if (mode_param == 0) {
       vel_topic = "diffbot_base_controller/cmd_vel_unstamped";
@@ -130,7 +130,96 @@ private:
     // Rotating coordinates to account for laser beam angle relative to robot
     double yM2 = yM * cos(M_PI / 2 - angle2) - xM * sin(M_PI / 2 - angle2);
     double xM2 = yM * sin(M_PI / 2 - angle2) + xM * cos(M_PI / 2 - angle2);
+    ///////////////////////////////////////
+    if (c < b) {
+      if (angle1 < 0 && angle2 < 0) {
+        double al_ = abs(angle1); // left angle
+        double ar_ = abs(angle2); // right angle
+        double a1 = al_ - ar_;    // between
 
+        double A = sqrt(b * b + c * c - 2 * b * c * cos(a1)); // Leg
+        double X_ = asin((b * sin(a1)) / A);                  // First angle
+        double X__ = M_PI - a1 - X_;                          // Second angle
+        double X1 = std::min(X_, X__); // whichever is smaller
+
+        double X2 = (M_PI / 2) - X1;
+        double X3 = M_PI - al_;
+        th_w = X2 + X3; //  difference
+      }
+      if (angle1 < 0 && angle2 > 0) {
+        double al_ = abs(angle1); // left angle
+        double ar_ = abs(angle2); // right angle
+        double a1 = al_ + ar_;    // between
+
+        double A = sqrt(b * b + c * c - 2 * b * c * cos(a1)); // Leg
+        double X_ = asin((b * sin(a1)) / A);                  // First angle
+        double X__ = M_PI - a1 - X_;                          // Second angle
+        double X1 = std::max(X_, X__); // whichever is bigger
+
+        double X2 = M_PI - (ar_ + X1);
+        th_w = (3 * M_PI / 2) - X2; //  difference
+      }
+      if (angle1 > 0 && angle2 > 0) {
+        double al_ = abs(angle1); // left angle
+        double ar_ = abs(angle2); // right angle
+        double a1 = ar_ - al_;    // between
+
+        double A = sqrt(b * b + c * c - 2 * b * c * cos(a1)); // Leg
+        double X_ = asin((b * sin(a1)) / A);                  // First angle
+        double X__ = M_PI - a1 - X_;                          // Second angle
+        double X1 = std::min(X_, X__); // whichever is smaller
+
+        double X2 = (M_PI / 2) - X1;
+        th_w = M_PI + X2 + al_; //  difference
+      }
+    }
+    if (b < c) {
+      if (angle2 > 0 && angle1 > 0) {
+        double al_ = abs(angle1); // left angle
+        double ar_ = abs(angle2); // right angle
+        double a1 = ar_ - al_;    // between
+
+        double A = sqrt(b * b + c * c - 2 * b * c * cos(a1)); // Leg
+        double X_ = asin((b * sin(a1)) / A);                  // First angle
+        double X__ = M_PI - a1 - X_;                          // Second angle
+        double X1 = std::min(X_, X__); // whichever is smaller
+
+        double X2 = (M_PI / 2) - X1;
+        double X3 = M_PI - ar_;
+        th_w = X2 + X3; //  difference
+      }
+      if (angle2 > 0 && angle1 < 0) {
+        double al_ = abs(angle1); // left angle
+        double ar_ = abs(angle2); // right angle
+        double a1 = al_ + ar_;    // between
+
+        double A = sqrt(b * b + c * c - 2 * b * c * cos(a1)); // Leg
+        double X_ = asin((b * sin(a1)) / A);                  // First angle
+        double X__ = M_PI - a1 - X_;                          // Second angle
+        double X1 = std::max(X_, X__); // whichever is bigger
+
+        double X2 = M_PI - (al_ + X1);
+        th_w = (3 * M_PI / 2) - X2; //  difference
+      }
+      if (angle2 < 0 && angle1 < 0) {
+        double al_ = abs(angle1); // left angle
+        double ar_ = abs(angle2); // right angle
+        double a1 = al_ - ar_;    // between
+
+        double A = sqrt(b * b + c * c - 2 * b * c * cos(a1)); // Leg
+        double X_ = asin((b * sin(a1)) / A);                  // First angle
+        double X__ = M_PI - a1 - X_;                          // Second angle
+        double X1 = std::min(X_, X__); // whichever is smaller
+
+        double X2 = (M_PI / 2) - X1;
+        th_w = M_PI + X2 + ar_; //  difference
+      }
+      th_w = -th_w;
+    }
+
+    tf2::Quaternion q2;
+    q2.setRPY(0.0, 0.0, th_w);
+    /////////////////////////////////////////
     // Creating transform
     geometry_msgs::msg::TransformStamped t;
     t.header.stamp = this->get_clock()->now();
@@ -143,19 +232,39 @@ private:
 
     t.transform.rotation.x = 0.0;
     t.transform.rotation.y = 0.0;
-    t.transform.rotation.z = 0.0;
-    t.transform.rotation.w = 1.0;
+    t.transform.rotation.z = q2.z();
+    t.transform.rotation.w = q2.w();
 
     tf_broadcaster_->sendTransform(t);
+
+    geometry_msgs::msg::TransformStamped t2;
+    t2.header.stamp = this->get_clock()->now();
+    t2.header.frame_id = "cart_frame";
+    t2.child_frame_id = "cart_frame_2";
+
+    t2.transform.translation.x = 0.65;
+    t2.transform.translation.y = 0.0;
+    t2.transform.translation.z = 0.0;
+
+    t2.transform.rotation.x = 0.0;
+    t2.transform.rotation.y = 0.0;
+    t2.transform.rotation.z = 0.0;
+    t2.transform.rotation.w = 1.0;
+
+    tf_broadcaster_->sendTransform(t2);
 
     switch (step_) {
 
     case 0: {
       if (counter_ % 10 == 0) {
-        RCLCPP_INFO(
+        /* RCLCPP_INFO(
             this->get_logger(),
             "\nAngle is %.2f\nNear distance is %.2f\nMode is %d\nLeg is %.2f",
-            theta, std::min(b, c), mode_param, leg_distance_);
+            theta, std::min(b, c), mode_param, leg_distance_); */
+
+        RCLCPP_INFO(this->get_logger(),
+                    "\nAngle1 is %.2f\nAngle2 is %.2f\nTH_W is %.2f", angle1,
+                    angle2, th_w);
       }
       counter_ += 1;
       break;
@@ -323,7 +432,9 @@ private:
   rclcpp::Time start_time, end_time;
   bool success;
   bool control;
-
+  ///////////
+  double th_w;
+  //////////
   // Robot parameters
   int mode_param;
   std::string vel_topic;
