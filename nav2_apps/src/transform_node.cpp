@@ -131,88 +131,41 @@ private:
     double yM2 = yM * cos(M_PI / 2 - angle2) - xM * sin(M_PI / 2 - angle2);
     double xM2 = yM * sin(M_PI / 2 - angle2) + xM * cos(M_PI / 2 - angle2);
     ///////////////////////////////////////
+    double al_ = abs(angle1); // left angle
+    double ar_ = abs(angle2); // right angle
+    double A = sqrt(b * b + c * c - 2 * b * c * cos(theta));
+    double X_ = asin((b * sin(theta)) / A);
+    double X__ = M_PI - theta - X_;
+
     if (c < b) {
       if (angle1 < 0 && angle2 < 0) {
-        double al_ = abs(angle1); // left angle
-        double ar_ = abs(angle2); // right angle
-        double a1 = al_ - ar_;    // between
-
-        double A = sqrt(b * b + c * c - 2 * b * c * cos(a1)); // Leg
-        double X_ = asin((b * sin(a1)) / A);                  // First angle
-        double X__ = M_PI - a1 - X_;                          // Second angle
-        double X1 = std::min(X_, X__); // whichever is smaller
-
+        double X1 = std::min(X_, X__);
         double X2 = (M_PI / 2) - X1;
         double X3 = M_PI - al_;
-        th_w = X2 + X3; //  difference
-      }
-      if (angle1 < 0 && angle2 > 0) {
-        double al_ = abs(angle1); // left angle
-        double ar_ = abs(angle2); // right angle
-        double a1 = al_ + ar_;    // between
-
-        double A = sqrt(b * b + c * c - 2 * b * c * cos(a1)); // Leg
-        double X_ = asin((b * sin(a1)) / A);                  // First angle
-        double X__ = M_PI - a1 - X_;                          // Second angle
-        double X1 = std::max(X_, X__); // whichever is bigger
-
+        th_w = X2 + X3;
+      } else if (angle1 < 0 && angle2 > 0) {
+        double X1 = std::max(X_, X__);
         double X2 = M_PI - (ar_ + X1);
-        th_w = (3 * M_PI / 2) - X2; //  difference
-      }
-      if (angle1 > 0 && angle2 > 0) {
-        double al_ = abs(angle1); // left angle
-        double ar_ = abs(angle2); // right angle
-        double a1 = ar_ - al_;    // between
-
-        double A = sqrt(b * b + c * c - 2 * b * c * cos(a1)); // Leg
-        double X_ = asin((b * sin(a1)) / A);                  // First angle
-        double X__ = M_PI - a1 - X_;                          // Second angle
-        double X1 = std::min(X_, X__); // whichever is smaller
-
+        th_w = (3 * M_PI / 2) - X2;
+      } else if (angle1 > 0 && angle2 > 0) {
+        double X1 = std::min(X_, X__);
         double X2 = (M_PI / 2) - X1;
-        th_w = M_PI + X2 + al_; //  difference
+        th_w = M_PI + X2 + al_;
       }
-    }
-    if (b < c) {
+    } else if (b < c) {
       if (angle2 > 0 && angle1 > 0) {
-        double al_ = abs(angle1); // left angle
-        double ar_ = abs(angle2); // right angle
-        double a1 = ar_ - al_;    // between
-
-        double A = sqrt(b * b + c * c - 2 * b * c * cos(a1)); // Leg
-        double X_ = asin((b * sin(a1)) / A);                  // First angle
-        double X__ = M_PI - a1 - X_;                          // Second angle
-        double X1 = std::min(X_, X__); // whichever is smaller
-
+        double X1 = std::min(X_, X__);
         double X2 = (M_PI / 2) - X1;
         double X3 = M_PI - ar_;
-        th_w = X2 + X3; //  difference
-      }
-      if (angle2 > 0 && angle1 < 0) {
-        double al_ = abs(angle1); // left angle
-        double ar_ = abs(angle2); // right angle
-        double a1 = al_ + ar_;    // between
-
-        double A = sqrt(b * b + c * c - 2 * b * c * cos(a1)); // Leg
-        double X_ = asin((b * sin(a1)) / A);                  // First angle
-        double X__ = M_PI - a1 - X_;                          // Second angle
-        double X1 = std::max(X_, X__); // whichever is bigger
-
+        th_w = X2 + X3;
+      } else if (angle2 > 0 && angle1 < 0) {
+        double X1 = std::max(X_, X__);
         double X2 = M_PI - (al_ + X1);
-        th_w = (3 * M_PI / 2) - X2; //  difference
-      }
-      if (angle2 < 0 && angle1 < 0) {
-        double al_ = abs(angle1); // left angle
-        double ar_ = abs(angle2); // right angle
-        double a1 = al_ - ar_;    // between
-
-        double A = sqrt(b * b + c * c - 2 * b * c * cos(a1)); // Leg
-        double X_ = asin((b * sin(a1)) / A);                  // First angle
-        double X__ = M_PI - a1 - X_;                          // Second angle
-        double X1 = std::min(X_, X__); // whichever is smaller
-
+        th_w = (3 * M_PI / 2) - X2;
+      } else if (angle2 < 0 && angle1 < 0) {
+        double X1 = std::min(X_, X__);
         double X2 = (M_PI / 2) - X1;
-        th_w = M_PI + X2 + ar_; //  difference
+        th_w = M_PI + X2 + ar_;
       }
       th_w = -th_w;
     }
@@ -229,50 +182,18 @@ private:
     geometry_msgs::msg::TransformStamped t;
     t.header.stamp = this->get_clock()->now();
     t.header.frame_id = "robot_front_laser_base_link";
-    t.child_frame_id = "cart_frame";
+    t.child_frame_id = "cart_frame_3";
 
-    t.transform.translation.x = xM2;
-    t.transform.translation.y = yM2;
+    t.transform.translation.x = xxx;
+    t.transform.translation.y = yyy;
     t.transform.translation.z = 0.0;
 
     t.transform.rotation.x = 0.0;
     t.transform.rotation.y = 0.0;
-    t.transform.rotation.z = q2.z();
-    t.transform.rotation.w = q2.w();
+    t.transform.rotation.z = 0.0;
+    t.transform.rotation.w = 1.0;
 
     tf_broadcaster_->sendTransform(t);
-
-    geometry_msgs::msg::TransformStamped t2;
-    t2.header.stamp = this->get_clock()->now();
-    t2.header.frame_id = "cart_frame";
-    t2.child_frame_id = "cart_frame_2";
-
-    t2.transform.translation.x = 0.65;
-    t2.transform.translation.y = 0.0;
-    t2.transform.translation.z = 0.0;
-
-    t2.transform.rotation.x = 0.0;
-    t2.transform.rotation.y = 0.0;
-    t2.transform.rotation.z = 0.0;
-    t2.transform.rotation.w = 1.0;
-
-    tf_broadcaster_->sendTransform(t2);
-
-    geometry_msgs::msg::TransformStamped t3;
-    t2.header.stamp = this->get_clock()->now();
-    t2.header.frame_id = "robot_front_laser_base_link";
-    t2.child_frame_id = "cart_frame_3";
-
-    t2.transform.translation.x = xxx;
-    t2.transform.translation.y = yyy;
-    t2.transform.translation.z = 0.0;
-
-    t2.transform.rotation.x = 0.0;
-    t2.transform.rotation.y = 0.0;
-    t2.transform.rotation.z = 0.0;
-    t2.transform.rotation.w = 1.0;
-
-    tf_broadcaster_->sendTransform(t2);
 
     switch (step_) {
 
