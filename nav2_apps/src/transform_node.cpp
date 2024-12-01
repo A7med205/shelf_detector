@@ -219,6 +219,11 @@ private:
 
     tf2::Quaternion q2;
     q2.setRPY(0.0, 0.0, th_w);
+
+    double yyy = -0.65 * sin(-th_w);
+    double xxx = 0.65 * cos(-th_w);
+    xxx = xxx + xM2;
+    yyy = yyy + yM2;
     /////////////////////////////////////////
     // Creating transform
     geometry_msgs::msg::TransformStamped t;
@@ -244,6 +249,22 @@ private:
 
     t2.transform.translation.x = 0.65;
     t2.transform.translation.y = 0.0;
+    t2.transform.translation.z = 0.0;
+
+    t2.transform.rotation.x = 0.0;
+    t2.transform.rotation.y = 0.0;
+    t2.transform.rotation.z = 0.0;
+    t2.transform.rotation.w = 1.0;
+
+    tf_broadcaster_->sendTransform(t2);
+
+    geometry_msgs::msg::TransformStamped t3;
+    t2.header.stamp = this->get_clock()->now();
+    t2.header.frame_id = "robot_front_laser_base_link";
+    t2.child_frame_id = "cart_frame_3";
+
+    t2.transform.translation.x = xxx;
+    t2.transform.translation.y = yyy;
     t2.transform.translation.z = 0.0;
 
     t2.transform.rotation.x = 0.0;
