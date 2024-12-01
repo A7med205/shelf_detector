@@ -38,8 +38,8 @@ public:
     this->get_parameter("mode", mode_param);
     if (mode_param == 0) {
       vel_topic = "diffbot_base_controller/cmd_vel_unstamped";
-      laser_link = 0.20;
-      dock_dis = 0.7;
+      laser_link = 0.22;
+      dock_dis = 0.8;
     } else {
       vel_topic = "/cmd_vel";
       laser_link = 0.23;
@@ -173,8 +173,8 @@ private:
     tf2::Quaternion q2;
     q2.setRPY(0.0, 0.0, th_w);
 
-    double yyy = -0.65 * sin(-th_w);
-    double xxx = 0.65 * cos(-th_w);
+    double yyy = -0.50 * sin(-th_w);
+    double xxx = 0.50 * cos(-th_w);
     xxx = xxx + xM2;
     yyy = yyy + yM2;
     /////////////////////////////////////////
@@ -215,11 +215,12 @@ private:
     // Rotating towards furthest leg
     case 1: {
       control = true;
-      if (std::max(b, c) == c) {
+      /*if (std::max(b, c) == c) {
         error_yaw = -angle2;
       } else {
         error_yaw = -angle1;
-      }
+      }*/
+      error_yaw = -std::atan2(yyy, xxx);
       if (std::abs(error_yaw) > 0.15) {
         xx = 0.0;
         zz = 0.5 * error_yaw;
@@ -233,14 +234,16 @@ private:
 
     // Moving towards furthest leg
     case 2: {
-      if (std::max(b, c) == c) {
+      /*if (std::max(b, c) == c) {
         error_yaw = -angle2;
         error_distance = c - b;
       } else {
         error_yaw = -angle1;
         error_distance = b - c;
-      }
-      if (error_distance > 0.01) {
+      }*/
+      error_yaw = -std::atan2(yyy, xxx);
+      error_distance = std::sqrt(std::pow(xxx, 2) + std::pow(yyy, 2));
+      if (error_distance > 0.02) {
         xx = 0.1;
         zz = 0.5 * error_yaw;
       } else {
@@ -286,13 +289,14 @@ private:
     case 5: {
       error_yaw = -std::atan2(yM2, xM2);
       error_distance = std::sqrt(std::pow(xM2, 2) + std::pow(yM2, 2));
-      if (error_distance > 0.15) {
+      if (error_distance > 0.1) { // Changed from 0.15
         zz = 0.5 * error_yaw;
         xx = 0.1;
       } else {
         step_ = 6; // Next step
         xx = zz = 0.0;
-        RCLCPP_INFO(this->get_logger(), "Starting final alignment");
+        // RCLCPP_INFO(this->get_logger(), "Starting final alignment");
+        RCLCPP_INFO(this->get_logger(), "Moving forward using /odom");
       }
       break;
     }
