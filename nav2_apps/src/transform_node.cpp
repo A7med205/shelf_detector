@@ -76,7 +76,7 @@ private:
       std::shared_ptr<nav2_apps::srv::GoToLoading::Response> response) {
     RCLCPP_INFO(this->get_logger(), "Service called");
     if (request->attach_to_shelf) {
-      RCLCPP_INFO(this->get_logger(), "Orienting towards park position");
+      RCLCPP_INFO(this->get_logger(), "1/9 Rotating towards park position");
       step_ = 1;
       while (!success) {
         if (success) {
@@ -179,8 +179,8 @@ private:
       tf2::Quaternion q2;
       q2.setRPY(0.0, 0.0, th_w);
 
-      yyy = -0.50 * sin(-th_w);
-      xxx = 0.50 * cos(-th_w);
+      yyy = -0.65 * sin(-th_w);
+      xxx = 0.65 * cos(-th_w);
       xxx = xxx + xM2;
       yyy = yyy + yM2;
       /////////////////////////////////////////
@@ -230,7 +230,7 @@ private:
                              : std::min(0.5 * error_yaw, -0.1);
       } else {
         step_ = 2; // Next step
-        RCLCPP_INFO(this->get_logger(), "Moving towards park position");
+        RCLCPP_INFO(this->get_logger(), "2/9 Moving towards park position");
         xx = zz = 0.0;
       }
       break;
@@ -246,8 +246,47 @@ private:
                              : std::min(0.5 * error_yaw, -0.1);
       } else {
         step_ = 3; // Next step
-        RCLCPP_INFO(this->get_logger(),
-                    "Starting correcting for laser link position");
+        RCLCPP_INFO(this->get_logger(), "3/9 Rotating towards furthest leg");
+        xx = zz = 0.0;
+      }
+      break;
+    }
+
+    // Rotating towards furthest leg
+    case 3: {
+      if (std::max(b, c) == c) {
+        error_yaw = -angle2;
+      } else {
+        error_yaw = -angle1;
+      }
+      if (std::abs(error_yaw) > 0.15) {
+        xx = 0.0;
+        zz = (error_yaw > 0) ? std::max(0.5 * error_yaw, 0.1)
+                             : std::min(0.5 * error_yaw, -0.1);
+      } else {
+        step_ = 4; // Next step
+        RCLCPP_INFO(this->get_logger(), "4/9 Moving towards furthest leg");
+        xx = zz = 0.0;
+      }
+      break;
+    }
+
+    // Moving towards furthest leg
+    case 4: {
+      if (std::max(b, c) == c) {
+        error_yaw = -angle2;
+        error_distance = c - b;
+      } else {
+        error_yaw = -angle1;
+        error_distance = b - c;
+      }
+      if (error_distance > 0.01) {
+        xx = 0.1;
+        zz = (error_yaw > 0) ? std::max(0.5 * error_yaw, 0.1)
+                             : std::min(0.5 * error_yaw, -0.1);
+      } else {
+        step_ = 5; // Next step
+        RCLCPP_INFO(this->get_logger(), "5/9 Correcting for lidar position");
         xx = zz = 0.0;
         x1 = msg->pose.pose.position.x;
         y1 = msg->pose.pose.position.y;
@@ -256,37 +295,36 @@ private:
     }
 
     // Correcting for laser link position
-    case 3: {
+    case 5: {
       error_distance = std::sqrt(std::pow(x1 - msg->pose.pose.position.x, 2) +
                                  std::pow(y1 - msg->pose.pose.position.y, 2));
       if (error_distance < laser_link) {
         xx = 0.1;
         zz = 0.0;
       } else {
-        step_ = 4; // Next step
+        step_ = 6; // Next step
         xx = zz = 0.0;
-        RCLCPP_INFO(this->get_logger(), "Rotating towards TF");
-        RCLCPP_INFO(this->get_logger(), "\nShelf is %d", shelf_);
+        RCLCPP_INFO(this->get_logger(), "6/9 Rotating towards TF");
       }
       break;
     }
 
-    // Orienting towards TF
-    case 4: {
+    // Rotating towards TF
+    case 6: {
       error_yaw = (shelf_) ? -std::atan2(yM2, xM2) : -angle1;
       if (std::abs(error_yaw) > 0.02) {
         zz = (error_yaw > 0) ? std::max(0.5 * error_yaw, 0.1)
                              : std::min(0.5 * error_yaw, -0.1);
       } else {
-        step_ = 5; // Next step
+        step_ = 7; // Next step
         xx = zz = 0.0;
-        RCLCPP_INFO(this->get_logger(), "Moving towards TF");
+        RCLCPP_INFO(this->get_logger(), "7/9 Moving towards TF");
       }
       break;
     }
 
     // Moving towards TF
-    case 5: {
+    case 7: {
       error_yaw = -std::atan2(yM2, xM2);
       error_distance = std::sqrt(std::pow(xM2, 2) + std::pow(yM2, 2));
       if (error_distance > 0.1) { // Changed from 0.15
@@ -294,37 +332,37 @@ private:
         zz = (error_yaw > 0) ? std::max(0.5 * error_yaw, 0.1)
                              : std::min(0.5 * error_yaw, -0.1);
       } else {
-        step_ = 6; // Next step
+        step_ = 8; // Next step
         xx = zz = 0.0;
         // RCLCPP_INFO(this->get_logger(), "Starting final alignment");
-        RCLCPP_INFO(this->get_logger(), "Final alignment");
+        RCLCPP_INFO(this->get_logger(), "8/9 Final alignment");
       }
       break;
     }
 
       // Final alignment
-    case 6: {
+    case 8: {
       error_yaw = -std::atan2(yM2, xM2);
       if (std::abs(error_yaw) > 0.1) {
         zz = 0.5 * error_yaw;
       } else {
-        step_ = 7; // Next step
+        step_ = 9; // Next step
         xx = zz = 0.0;
-        RCLCPP_INFO(this->get_logger(), "Moving forward using /odom");
+        RCLCPP_INFO(this->get_logger(), "9/9 Docking using odometry");
         x1 = msg->pose.pose.position.x;
         y1 = msg->pose.pose.position.y;
       }
       break;
     }
       // Odom docking before lift
-    case 7: {
+    case 9: {
       error_distance = std::sqrt(std::pow(x1 - msg->pose.pose.position.x, 2) +
                                  std::pow(y1 - msg->pose.pose.position.y, 2));
       if (error_distance < dock_dis) {
         xx = 0.1;
         zz = 0.0;
       } else {
-        step_ = 8; // Next step
+        step_ = 10; // Next step
         xx = zz = 0.0;
       }
       break;
@@ -348,7 +386,7 @@ private:
       vel_msg.linear.x = xx;
       vel_msg.angular.z = zz;
       cmd_vel_publisher->publish(vel_msg);
-      if (step_ == 8) {
+      if (step_ == 10) {
         control = false;
         RCLCPP_INFO(this->get_logger(), "Finished attachment with cart");
         success = true;
