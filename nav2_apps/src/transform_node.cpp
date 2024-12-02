@@ -42,7 +42,7 @@ public:
       dock_dis = 0.65;
     } else {
       vel_topic = "/cmd_vel";
-      laser_link = 0.23;
+      laser_link = 0.24;
       dock_dis = 0.65;
     }
 
@@ -111,7 +111,7 @@ private:
     // Confirming cart presence
     theta = std::abs(angle1 - angle2);
     leg_distance_ = sqrt(c * c + b * b - 2 * c * b * cos(theta));
-    if (leg_distance_ < 0.4 || leg_distance_ > 0.8) {
+    if (leg_distance_ < 0.4 || leg_distance_ > 0.72) {
       shelf_ = false;
     } else {
       shelf_ = true;
@@ -212,9 +212,7 @@ private:
 
     case 0: {
       if (counter_ % 10 == 0) {
-        RCLCPP_INFO(this->get_logger(),
-                    "\nAngle to park is %.2f\nAngle to dock is %.2f",
-                    std::atan2(yyy, xxx), std::atan2(yM2, xM2));
+        RCLCPP_INFO(this->get_logger(), "\nLeg dis is %.2f", leg_distance_);
       }
       counter_ += 1;
       break;
