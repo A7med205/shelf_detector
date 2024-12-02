@@ -112,72 +112,85 @@ private:
     theta = std::abs(angle1 - angle2);
     leg_distance_ = sqrt(c * c + b * b - 2 * c * b * cos(theta));
     if (leg_distance_ < 0.4 || leg_distance_ > 0.8) {
-      b = c = 0;
+      shelf_ = false;
+    } else {
+      shelf_ = true;
     }
   }
 
   void odom_callback(const nav_msgs::msg::Odometry::SharedPtr msg) {
-    // Coordinates of points B and C
-    double xC = 0.0;
-    double yC = c;
-    double xB = b * sin(theta);
-    double yB = b * cos(theta);
+    // Main variables
+    double xxx, yyy, xM2, yM2;
 
-    // Midpoint M coordinates
-    double xM = (xB + xC) / 2.0;
-    double yM = (yB + yC) / 2.0;
+    if (shelf_) {
+      // Coordinates of points B and C
+      double xC = 0.0;
+      double yC = c;
+      double xB = b * sin(theta);
+      double yB = b * cos(theta);
 
-    // Rotating coordinates to account for laser beam angle relative to robot
-    double yM2 = yM * cos(M_PI / 2 - angle2) - xM * sin(M_PI / 2 - angle2);
-    double xM2 = yM * sin(M_PI / 2 - angle2) + xM * cos(M_PI / 2 - angle2);
-    ///////////////////////////////////////
-    double al_ = abs(angle1); // left angle
-    double ar_ = abs(angle2); // right angle
-    double A = sqrt(b * b + c * c - 2 * b * c * cos(theta));
-    double X_ = asin((b * sin(theta)) / A);
-    double X__ = M_PI - theta - X_;
+      // Midpoint M coordinates
+      double xM = (xB + xC) / 2.0;
+      double yM = (yB + yC) / 2.0;
 
-    if (c < b) {
-      if (angle1 < 0 && angle2 < 0) {
-        double X1 = std::min(X_, X__);
-        double X2 = (M_PI / 2) - X1;
-        double X3 = M_PI - al_;
-        th_w = X2 + X3;
-      } else if (angle1 < 0 && angle2 > 0) {
-        double X1 = std::max(X_, X__);
-        double X2 = M_PI - (ar_ + X1);
-        th_w = (3 * M_PI / 2) - X2;
-      } else if (angle1 > 0 && angle2 > 0) {
-        double X1 = std::min(X_, X__);
-        double X2 = (M_PI / 2) - X1;
-        th_w = M_PI + X2 + al_;
+      // Rotating coordinates to account for laser beam angle relative to robot
+      yM2 = yM * cos(M_PI / 2 - angle2) - xM * sin(M_PI / 2 - angle2);
+      xM2 = yM * sin(M_PI / 2 - angle2) + xM * cos(M_PI / 2 - angle2);
+      ///////////////////////////////////////
+      double al_ = abs(angle1); // left angle
+      double ar_ = abs(angle2); // right angle
+      double A = sqrt(b * b + c * c - 2 * b * c * cos(theta));
+      double X_ = asin((b * sin(theta)) / A);
+      double X__ = M_PI - theta - X_;
+
+      if (c < b) {
+        if (angle1 < 0 && angle2 < 0) {
+          double X1 = std::min(X_, X__);
+          double X2 = (M_PI / 2) - X1;
+          double X3 = M_PI - al_;
+          th_w = X2 + X3;
+        } else if (angle1 < 0 && angle2 > 0) {
+          double X1 = std::max(X_, X__);
+          double X2 = M_PI - (ar_ + X1);
+          th_w = (3 * M_PI / 2) - X2;
+        } else if (angle1 > 0 && angle2 > 0) {
+          double X1 = std::min(X_, X__);
+          double X2 = (M_PI / 2) - X1;
+          th_w = M_PI + X2 + al_;
+        }
+      } else if (b < c) {
+        if (angle2 > 0 && angle1 > 0) {
+          double X1 = std::min(X_, X__);
+          double X2 = (M_PI / 2) - X1;
+          double X3 = M_PI - ar_;
+          th_w = X2 + X3;
+        } else if (angle2 > 0 && angle1 < 0) {
+          double X1 = std::max(X_, X__);
+          double X2 = M_PI - (al_ + X1);
+          th_w = (3 * M_PI / 2) - X2;
+        } else if (angle2 < 0 && angle1 < 0) {
+          double X1 = std::min(X_, X__);
+          double X2 = (M_PI / 2) - X1;
+          th_w = M_PI + X2 + ar_;
+        }
+        th_w = -th_w;
       }
-    } else if (b < c) {
-      if (angle2 > 0 && angle1 > 0) {
-        double X1 = std::min(X_, X__);
-        double X2 = (M_PI / 2) - X1;
-        double X3 = M_PI - ar_;
-        th_w = X2 + X3;
-      } else if (angle2 > 0 && angle1 < 0) {
-        double X1 = std::max(X_, X__);
-        double X2 = M_PI - (al_ + X1);
-        th_w = (3 * M_PI / 2) - X2;
-      } else if (angle2 < 0 && angle1 < 0) {
-        double X1 = std::min(X_, X__);
-        double X2 = (M_PI / 2) - X1;
-        th_w = M_PI + X2 + ar_;
-      }
-      th_w = -th_w;
+
+      tf2::Quaternion q2;
+      q2.setRPY(0.0, 0.0, th_w);
+
+      yyy = -0.50 * sin(-th_w);
+      xxx = 0.50 * cos(-th_w);
+      xxx = xxx + xM2;
+      yyy = yyy + yM2;
+      /////////////////////////////////////////
+    } else {
+      xxx = 0;
+      yyy = 0;
+      xM2 = 0;
+      yM2 = 0;
     }
 
-    tf2::Quaternion q2;
-    q2.setRPY(0.0, 0.0, th_w);
-
-    double yyy = -0.50 * sin(-th_w);
-    double xxx = 0.50 * cos(-th_w);
-    xxx = xxx + xM2;
-    yyy = yyy + yM2;
-    /////////////////////////////////////////
     // Creating transform
     geometry_msgs::msg::TransformStamped t;
     t.header.stamp = this->get_clock()->now();
@@ -253,14 +266,14 @@ private:
         step_ = 4; // Next step
         xx = zz = 0.0;
         RCLCPP_INFO(this->get_logger(), "Rotating towards TF");
-        RCLCPP_INFO(this->get_logger(), "\nc is %.2f\nb is %.2f", c, b);
+        RCLCPP_INFO(this->get_logger(), "\nShelf is %d", shelf_);
       }
       break;
     }
 
     // Orienting towards TF
     case 4: {
-      error_yaw = ((c == 0) || (b == 0)) ? (c - b) : -std::atan2(yM2, xM2);
+      error_yaw = (shelf_) ? -std::atan2(yM2, xM2) : -angle1;
       if (std::abs(error_yaw) > 0.02) {
         zz = (error_yaw > 0) ? std::max(0.5 * error_yaw, 0.1)
                              : std::min(0.5 * error_yaw, -0.1);
@@ -364,6 +377,7 @@ private:
   double x1, y1;
   int step_, counter_;
   rclcpp::Time start_time, end_time;
+  bool shelf_;
   bool success;
   bool control;
   ///////////
