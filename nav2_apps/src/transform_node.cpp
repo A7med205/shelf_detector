@@ -38,8 +38,8 @@ public:
     this->get_parameter("mode", mode_param);
     if (mode_param == 0) {
       vel_topic = "diffbot_base_controller/cmd_vel_unstamped";
-      laser_link = 0.22;
-      dock_dis = 0.8;
+      laser_link = 0.23;
+      dock_dis = 0.65;
     } else {
       vel_topic = "/cmd_vel";
       laser_link = 0.23;
@@ -76,7 +76,7 @@ private:
       std::shared_ptr<nav2_apps::srv::GoToLoading::Response> response) {
     RCLCPP_INFO(this->get_logger(), "Service called");
     if (request->attach_to_shelf) {
-      RCLCPP_INFO(this->get_logger(), "Orienting towards furthest leg");
+      RCLCPP_INFO(this->get_logger(), "Orienting towards park position");
       step_ = 1;
       while (!success) {
         if (success) {
@@ -112,7 +112,7 @@ private:
     theta = std::abs(angle1 - angle2);
     leg_distance_ = sqrt(c * c + b * b - 2 * c * b * cos(theta));
     if (leg_distance_ < 0.4 || leg_distance_ > 0.8) {
-      b = c = 0.0;
+      b = c = 0;
     }
   }
 
@@ -199,53 +199,38 @@ private:
 
     case 0: {
       if (counter_ % 10 == 0) {
-        /* RCLCPP_INFO(
-            this->get_logger(),
-            "\nAngle is %.2f\nNear distance is %.2f\nMode is %d\nLeg is %.2f",
-            theta, std::min(b, c), mode_param, leg_distance_); */
-
         RCLCPP_INFO(this->get_logger(),
-                    "\nAngle1 is %.2f\nAngle2 is %.2f\nTH_W is %.2f", angle1,
-                    angle2, th_w);
+                    "\nAngle to park is %.2f\nAngle to dock is %.2f",
+                    std::atan2(yyy, xxx), std::atan2(yM2, xM2));
       }
       counter_ += 1;
       break;
     }
 
-    // Rotating towards furthest leg
+    // Rotating towards park position
     case 1: {
       control = true;
-      /*if (std::max(b, c) == c) {
-        error_yaw = -angle2;
-      } else {
-        error_yaw = -angle1;
-      }*/
       error_yaw = -std::atan2(yyy, xxx);
       if (std::abs(error_yaw) > 0.15) {
         xx = 0.0;
-        zz = 0.5 * error_yaw;
+        zz = (error_yaw > 0) ? std::max(0.5 * error_yaw, 0.1)
+                             : std::min(0.5 * error_yaw, -0.1);
       } else {
         step_ = 2; // Next step
-        RCLCPP_INFO(this->get_logger(), "Moving towards furthest leg");
+        RCLCPP_INFO(this->get_logger(), "Moving towards park position");
         xx = zz = 0.0;
       }
       break;
     }
 
-    // Moving towards furthest leg
+    // Moving towards park position
     case 2: {
-      /*if (std::max(b, c) == c) {
-        error_yaw = -angle2;
-        error_distance = c - b;
-      } else {
-        error_yaw = -angle1;
-        error_distance = b - c;
-      }*/
       error_yaw = -std::atan2(yyy, xxx);
       error_distance = std::sqrt(std::pow(xxx, 2) + std::pow(yyy, 2));
       if (error_distance > 0.02) {
-        xx = 0.1;
-        zz = 0.5 * error_yaw;
+        xx = std::max(0.2 * error_distance, 0.1);
+        zz = (error_yaw > 0) ? std::max(0.5 * error_yaw, 0.1)
+                             : std::min(0.5 * error_yaw, -0.1);
       } else {
         step_ = 3; // Next step
         RCLCPP_INFO(this->get_logger(),
@@ -268,15 +253,17 @@ private:
         step_ = 4; // Next step
         xx = zz = 0.0;
         RCLCPP_INFO(this->get_logger(), "Rotating towards TF");
+        RCLCPP_INFO(this->get_logger(), "\nc is %.2f\nb is %.2f", c, b);
       }
       break;
     }
 
     // Orienting towards TF
     case 4: {
-      error_yaw = -std::atan2(yM2, xM2);
-      if (std::abs(error_yaw) > 0.1) {
-        zz = 0.5 * error_yaw;
+      error_yaw = ((c == 0) || (b == 0)) ? (c - b) : -std::atan2(yM2, xM2);
+      if (std::abs(error_yaw) > 0.02) {
+        zz = (error_yaw > 0) ? std::max(0.5 * error_yaw, 0.1)
+                             : std::min(0.5 * error_yaw, -0.1);
       } else {
         step_ = 5; // Next step
         xx = zz = 0.0;
@@ -290,13 +277,14 @@ private:
       error_yaw = -std::atan2(yM2, xM2);
       error_distance = std::sqrt(std::pow(xM2, 2) + std::pow(yM2, 2));
       if (error_distance > 0.1) { // Changed from 0.15
-        zz = 0.5 * error_yaw;
-        xx = 0.1;
+        xx = std::max(0.2 * error_distance, 0.1);
+        zz = (error_yaw > 0) ? std::max(0.5 * error_yaw, 0.1)
+                             : std::min(0.5 * error_yaw, -0.1);
       } else {
         step_ = 6; // Next step
         xx = zz = 0.0;
         // RCLCPP_INFO(this->get_logger(), "Starting final alignment");
-        RCLCPP_INFO(this->get_logger(), "Moving forward using /odom");
+        RCLCPP_INFO(this->get_logger(), "Final alignment");
       }
       break;
     }
