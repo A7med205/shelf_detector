@@ -40,10 +40,14 @@ public:
       vel_topic = "diffbot_base_controller/cmd_vel_unstamped";
       laser_link = 0.23;
       dock_dis = 0.65;
+      leg_min = 0.7;
+      leg_max = 0.8;
     } else {
       vel_topic = "/cmd_vel";
       laser_link = 0.24;
       dock_dis = 0.65;
+      leg_min = 0.4;
+      leg_max = 0.72;
     }
 
     // Services, subscribers, and publishers
@@ -111,7 +115,7 @@ private:
     // Confirming cart presence
     theta = std::abs(angle1 - angle2);
     leg_distance_ = sqrt(c * c + b * b - 2 * c * b * cos(theta));
-    if (leg_distance_ < 0.4 || leg_distance_ > 0.72) {
+    if (leg_distance_ < leg_min || leg_distance_ > leg_max) {
       shelf_ = false;
     } else {
       shelf_ = true;
@@ -212,7 +216,8 @@ private:
 
     case 0: {
       if (counter_ % 10 == 0) {
-        RCLCPP_INFO(this->get_logger(), "\nLeg dis is %.2f", leg_distance_);
+        RCLCPP_INFO(this->get_logger(), "\nLeg dis is %.2f\nShelf: %d",
+                    leg_distance_, shelf_);
       }
       counter_ += 1;
       break;
@@ -424,6 +429,7 @@ private:
   std::string vel_topic;
   double laser_link;
   double dock_dis;
+  double leg_min, leg_max;
 };
 
 int main(int argc, char *argv[]) {

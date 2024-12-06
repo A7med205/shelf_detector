@@ -18,7 +18,7 @@ global_costmap:
       global_frame: map
       robot_base_frame: robot_base_footprint
       use_sim_time: false
-      robot_radius: 0.2
+      robot_radius: 0.25
       resolution: 0.04
       track_unknown_space: true
       plugins: ["static_layer", "inflation_layer", "obstacle_layer"]
@@ -27,7 +27,7 @@ global_costmap:
         map_subscribe_transient_local: True
       inflation_layer:
         plugin: "nav2_costmap_2d::InflationLayer"
-        cost_scaling_factor: 10.0
+        cost_scaling_factor: 5.0
         inflation_radius: 0.55
       obstacle_layer:
         plugin: "nav2_costmap_2d::ObstacleLayer"
