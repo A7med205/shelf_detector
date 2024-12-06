@@ -7,14 +7,18 @@ endif()
 
 # find dependencies
 find_package(ament_cmake REQUIRED)
+find_package(rclcpp REQUIRED)
 find_package(rclpy REQUIRED)
 find_package(geometry_msgs REQUIRED)
-find_package(rclcpp REQUIRED)
 find_package(sensor_msgs REQUIRED)
 find_package(nav_msgs REQUIRED)
 find_package(tf2_ros REQUIRED)
 find_package(tf2 REQUIRED)
+find_package(rclcpp_action REQUIRED)
+find_package(nav2_msgs REQUIRED)
 find_package(rosidl_default_generators REQUIRED)
+
+
 
 set(srv_files
   "srv/GoToLoading.srv"
@@ -25,7 +29,16 @@ rosidl_generate_interfaces(${PROJECT_NAME}
   DEPENDENCIES
 )
 
+add_executable(action_client src/action_client.cpp)
+
 add_executable(transform_node src/transform_node.cpp)
+add_executable(service_client src/service_client.cpp)
+
+ament_target_dependencies(action_client
+  rclcpp
+  rclcpp_action
+  nav2_msgs
+)
 
 ament_target_dependencies(transform_node
   rclcpp
@@ -36,9 +49,17 @@ ament_target_dependencies(transform_node
   tf2
 )
 
+ament_target_dependencies(service_client
+  rclcpp
+  nav_msgs
+)
+
 ament_export_dependencies(rosidl_default_runtime)
 
 rosidl_target_interfaces(transform_node
+  ${PROJECT_NAME} "rosidl_typesupport_cpp")
+
+rosidl_target_interfaces(service_client
   ${PROJECT_NAME} "rosidl_typesupport_cpp")
 
 if(BUILD_TESTING)
@@ -60,6 +81,8 @@ install(DIRECTORY
 
 install(TARGETS
   transform_node
+  action_client
+  service_client
   DESTINATION lib/${PROJECT_NAME})
 
 ament_package()

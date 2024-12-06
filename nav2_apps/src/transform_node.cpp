@@ -88,7 +88,8 @@ private:
         }
       }
       response->complete = true;
-      rclcpp::shutdown();
+      RCLCPP_INFO(this->get_logger(), "Finished attachment with cart");
+      // rclcpp::shutdown();
     }
   }
 
@@ -391,7 +392,6 @@ private:
       cmd_vel_publisher->publish(vel_msg);
       if (step_ == 10) {
         control = false;
-        RCLCPP_INFO(this->get_logger(), "Finished attachment with cart");
         success = true;
       }
     }
