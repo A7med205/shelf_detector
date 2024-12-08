@@ -213,6 +213,7 @@ private:
 
     tf_broadcaster_->sendTransform(t);
 
+    // Control switch
     switch (step_) {
 
     case 0: {

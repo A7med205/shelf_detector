@@ -1,4 +1,5 @@
 #include "nav2_msgs/action/navigate_to_pose.hpp"
+#include "nav_msgs/msg/odometry.hpp"
 #include <rclcpp/rclcpp.hpp>
 #include <rclcpp_action/rclcpp_action.hpp>
 #include <std_msgs/msg/int32.hpp>
@@ -16,19 +17,22 @@ public:
         rclcpp_action::create_client<NavigateToPose>(this, "/navigate_to_pose");
 
     main_command = this->create_subscription<std_msgs::msg::Int32>(
-        "command_topic", 10,
+        "/command_topic", 10,
         std::bind(&NavigateToPoseClient::command_callback, this,
                   std::placeholders::_1));
-    timer_ =
-        this->create_wall_timer(std::chrono::milliseconds(200),
-                                std::bind(&TimerNode::timerCallback, this));
+
+    odom_sub = this->create_subscription<nav_msgs::msg::Odometry>(
+        "/odom", 10,
+        std::bind(&NavigateToPoseClient::odom_callback, this,
+                  std::placeholders::_1));
 
     // Wait for the action server
   }
 
 private:
-  void timerCallback() {
-    RCLCPP_INFO(this->get_logger(), "Timer callback triggered!");
+  void odom_callback(const nav_msgs::msg::Odometry::SharedPtr msg) {
+
+  
     if (command_ == 1) {
       send_goal(0.68, 0.0, 0.0, 1.0);
     }
@@ -112,7 +116,7 @@ private:
 
   rclcpp_action::Client<NavigateToPose>::SharedPtr client_;
   rclcpp::Subscription<std_msgs::msg::Int32>::SharedPtr main_command;
-  rclcpp::TimerBase::SharedPtr timer_;
+  rclcpp::Subscription<std_msgs::msg::Int32>::SharedPtr odom_sub;
 
   int command_;
   bool waiting_;

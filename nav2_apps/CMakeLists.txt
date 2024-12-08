@@ -38,6 +38,7 @@ ament_target_dependencies(action_client
   rclcpp
   rclcpp_action
   nav2_msgs
+  nav_msgs
   std_msgs
 )
 
