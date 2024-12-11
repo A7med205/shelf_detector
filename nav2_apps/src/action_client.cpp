@@ -34,7 +34,7 @@ public:
     cmd_vel_publisher = this->create_publisher<geometry_msgs::msg::Twist>(
         "/diffbot_base_controller/cmd_vel_unstamped", 10);
     controller_ = this->create_wall_timer(
-        std::chrono::milliseconds(200),
+        std::chrono::milliseconds(100),
         std::bind(&NavigateToPoseClient::control_callback, this));
 
     waypoints = {2.27, -2.04, 0.92, -2.09, 0.68, 0.04,
@@ -96,12 +96,12 @@ private:
                      waypoints[goal_index] - current_x);
 
       yaw_error = angle_to_waypoint - yaw_;
-      if (std::abs(yaw_error) > 0.15) {
+      if (std::abs(yaw_error) > 0.1) {
         // xx = 0.0;
         zz = (yaw_error > 0) ? std::max(0.5 * yaw_error, 0.2)
                              : std::min(0.5 * yaw_error, -0.2);
       } else {
-        xx = zz = 0.0;
+        zz = 0.0;
         control_ = false;
         command_ = 3;
         RCLCPP_INFO(this->get_logger(), "Orientation reached, sending goal");
@@ -112,56 +112,56 @@ private:
     case 3: {
       // Sending current goal
       if (!waiting_) {
+        RCLCPP_INFO(this->get_logger(), "\nSending:\nEnd: %d\nGoal: %d",
+                    end_index / 2 + 1, goal_index / 2 + 1);
         send_goal(waypoints[goal_index], waypoints[goal_index + 1]);
         RCLCPP_INFO(this->get_logger(), "Goal sent");
         waiting_ = true;
       }
 
-      // distance_error = std::hypot(waypoints[goal_index] - current_x,
-      //                            waypoints[goal_index + 1] - current_y);
+      distance_error = std::hypot(waypoints[goal_index] - current_x,
+                                  waypoints[goal_index + 1] - current_y);
 
       // Checking success and switching to next goal
-      if (success_) {
+      if (success_ || (aborted_ && distance_error < 0.3)) {
         if (end_index == 0) {
           RCLCPP_INFO(this->get_logger(), "Reached, moving to next");
-          goal_index = (goal_index < end_index) ? -10 : goal_index - 2;
-        } else if (end_index == 10) {
+          goal_index = (goal_index == end_index) ? -10 : goal_index - 2;
+        } else if (end_index == waypoints.size() - 2) {
           RCLCPP_INFO(this->get_logger(), "Reached, moving to next");
-          goal_index = (goal_index > end_index) ? -20 : goal_index + 2;
+          goal_index =
+              (goal_index == (waypoints.size() - 2)) ? -20 : goal_index + 2;
         }
-        RCLCPP_INFO(this->get_logger(), "\nEnd is %d\nGoal is %d",
-                    end_index / 2 + 1, goal_index / 2 + 1);
         waiting_ = false;
         success_ = false;
+        aborted_ = false;
         control_ = true;
         command_ = 2;
       } // else if (aborted_) {
-        // RCLCPP_INFO(this->get_logger(), "Search failed");
+        // RCLCPP_INFO(this->get_logger(), "Round");
         // command_ = 4;
       //}
 
       // Starting other direction round or ending search
       if (goal_index == -10 && round_ == 1) {
         RCLCPP_INFO(this->get_logger(), "Next round");
-        end_index = 10;
+        end_index = waypoints.size() - 2;
         goal_index = 2;
         command_ = 2;
         control_ = true;
         success_ = false;
         round_ += 1;
-        RCLCPP_INFO(this->get_logger(), "\nEnd is %d\nGoal is %d",
-                    end_index / 2 + 1, goal_index / 2 + 1);
       } else if (goal_index == -20 && round_ == 1) {
         RCLCPP_INFO(this->get_logger(), "Next round");
         end_index = 0;
-        goal_index = 8;
+        goal_index = waypoints.size() - 4;
         command_ = 2;
         control_ = true;
         success_ = false;
         round_ += 1;
-        RCLCPP_INFO(this->get_logger(), "\nEnd is %d\nGoal is %d",
-                    end_index / 2 + 1, goal_index / 2 + 1);
-      } else if (goal_index < 0 && round_ > 2) {
+      }
+
+      if (goal_index < 0 && round_ > 2) {
         RCLCPP_INFO(this->get_logger(), "Search successful");
         command_ = 4;
       }
