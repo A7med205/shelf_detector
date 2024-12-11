@@ -373,7 +373,6 @@ private:
       break;
     }
 
-    // Default case
     default:
       break;
     }

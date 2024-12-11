@@ -25,11 +25,11 @@ def generate_launch_description():
 
     return LaunchDescription([
 
-        Node(
-            package='nav2_apps',
-            executable='approach_service_server',
-            name='approach_shelf_service',
-            output='screen'),
+        #Node(
+        #    package='nav2_apps',
+        #    executable='approach_service_server',
+        #    name='approach_shelf_service',
+        #    output='screen'),
 
         Node(
             package='nav2_controller',
