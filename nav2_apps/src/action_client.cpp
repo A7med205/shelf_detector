@@ -37,8 +37,6 @@ public:
         std::chrono::milliseconds(100),
         std::bind(&NavigateToPoseClient::control_callback, this));
 
-    waypoints = {2.27, -2.04, 0.92, -2.09, 0.68, 0.04,
-                 2.49, 0.10,  4.39, 0.11,  5.46, -0.03};
     waiting_ = false;
     aborted_ = false;
     control_ = false;
@@ -74,6 +72,8 @@ private:
     if (msg->data == 1) {
       RCLCPP_INFO(this->get_logger(), "I received: '%d'", msg->data);
       command_ = 1;
+      waypoints = {2.27, -2.04, 0.92, -2.09, 0.68, 0.04,
+                   2.49, 0.10,  4.39, 0.11,  5.46, -0.03};
     }
   }
 

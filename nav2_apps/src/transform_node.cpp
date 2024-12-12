@@ -79,17 +79,22 @@ private:
       const std::shared_ptr<nav2_apps::srv::GoToLoading::Request> request,
       std::shared_ptr<nav2_apps::srv::GoToLoading::Response> response) {
     RCLCPP_INFO(this->get_logger(), "Service called");
-    if (request->attach_to_shelf) {
+    if (request->attach_to_shelf == 1) {
+      response->complete = shelf_;
+      if (shelf_) {
+        RCLCPP_INFO(this->get_logger(), "Shelf detected");
+      }
+    } else if (request->attach_to_shelf == 10) {
       RCLCPP_INFO(this->get_logger(), "1/9 Rotating towards park position");
-      step_ = 1;
+      step_ = 10;
       while (!success) {
         if (success) {
           break;
         }
+        rclcpp::sleep_for(std::chrono::seconds(0.2));
       }
       response->complete = true;
       RCLCPP_INFO(this->get_logger(), "Finished attachment with cart");
-      // rclcpp::shutdown();
     }
   }
 
@@ -226,7 +231,7 @@ private:
     }
 
     // Rotating towards park position
-    case 1: {
+    case 10: {
       control = true;
       error_yaw = -std::atan2(yyy, xxx);
       if (std::abs(error_yaw) > 0.15) {
@@ -234,7 +239,7 @@ private:
         zz = (error_yaw > 0) ? std::max(0.5 * error_yaw, 0.1)
                              : std::min(0.5 * error_yaw, -0.1);
       } else {
-        step_ = 2; // Next step
+        step_ = 20; // Next step
         RCLCPP_INFO(this->get_logger(), "2/9 Moving towards park position");
         xx = zz = 0.0;
       }
@@ -242,7 +247,7 @@ private:
     }
 
     // Moving towards park position
-    case 2: {
+    case 20: {
       error_yaw = -std::atan2(yyy, xxx);
       error_distance = std::sqrt(std::pow(xxx, 2) + std::pow(yyy, 2));
       if (error_distance > 0.02) {
@@ -250,7 +255,7 @@ private:
         zz = (error_yaw > 0) ? std::max(0.5 * error_yaw, 0.1)
                              : std::min(0.5 * error_yaw, -0.1);
       } else {
-        step_ = 3; // Next step
+        step_ = 30; // Next step
         RCLCPP_INFO(this->get_logger(), "3/9 Rotating towards furthest leg");
         xx = zz = 0.0;
       }
@@ -258,7 +263,7 @@ private:
     }
 
     // Rotating towards furthest leg
-    case 3: {
+    case 30: {
       if (std::max(b, c) == c) {
         error_yaw = -angle2;
       } else {
@@ -269,7 +274,7 @@ private:
         zz = (error_yaw > 0) ? std::max(0.5 * error_yaw, 0.1)
                              : std::min(0.5 * error_yaw, -0.1);
       } else {
-        step_ = 4; // Next step
+        step_ = 40; // Next step
         RCLCPP_INFO(this->get_logger(), "4/9 Moving towards furthest leg");
         xx = zz = 0.0;
       }
@@ -277,7 +282,7 @@ private:
     }
 
     // Moving towards furthest leg
-    case 4: {
+    case 40: {
       if (std::max(b, c) == c) {
         error_yaw = -angle2;
         error_distance = c - b;
@@ -290,8 +295,10 @@ private:
         zz = (error_yaw > 0) ? std::max(0.5 * error_yaw, 0.1)
                              : std::min(0.5 * error_yaw, -0.1);
       } else {
-        step_ = 5; // Next step
-        RCLCPP_INFO(this->get_logger(), "5/9 Correcting for lidar position");
+        step_ = 5;
+        0 // Next step
+            RCLCPP_INFO(this->get_logger(),
+                        "5/9 Correcting for lidar position");
         xx = zz = 0.0;
         x1 = msg->pose.pose.position.x;
         y1 = msg->pose.pose.position.y;
@@ -300,36 +307,38 @@ private:
     }
 
     // Correcting for laser link position
-    case 5: {
+    case 50: {
       error_distance = std::sqrt(std::pow(x1 - msg->pose.pose.position.x, 2) +
                                  std::pow(y1 - msg->pose.pose.position.y, 2));
       if (error_distance < laser_link) {
         xx = 0.1;
         zz = 0.0;
       } else {
-        step_ = 6; // Next step
-        xx = zz = 0.0;
+        step_ = 6;
+        0 // Next step
+            xx = zz = 0.0;
         RCLCPP_INFO(this->get_logger(), "6/9 Rotating towards TF");
       }
       break;
     }
 
     // Rotating towards TF
-    case 6: {
+    case 60: {
       error_yaw = (shelf_) ? -std::atan2(yM2, xM2) : -angle1;
       if (std::abs(error_yaw) > 0.02) {
         zz = (error_yaw > 0) ? std::max(0.5 * error_yaw, 0.1)
                              : std::min(0.5 * error_yaw, -0.1);
       } else {
-        step_ = 7; // Next step
-        xx = zz = 0.0;
+        step_ = 7;
+        0 // Next step
+            xx = zz = 0.0;
         RCLCPP_INFO(this->get_logger(), "7/9 Moving towards TF");
       }
       break;
     }
 
     // Moving towards TF
-    case 7: {
+    case 70: {
       error_yaw = -std::atan2(yM2, xM2);
       error_distance = std::sqrt(std::pow(xM2, 2) + std::pow(yM2, 2));
       if (error_distance > 0.1) { // Changed from 0.15
@@ -337,8 +346,9 @@ private:
         zz = (error_yaw > 0) ? std::max(0.5 * error_yaw, 0.1)
                              : std::min(0.5 * error_yaw, -0.1);
       } else {
-        step_ = 8; // Next step
-        xx = zz = 0.0;
+        step_ = 8;
+        0 // Next step
+            xx = zz = 0.0;
         // RCLCPP_INFO(this->get_logger(), "Starting final alignment");
         RCLCPP_INFO(this->get_logger(), "8/9 Final alignment");
       }
@@ -346,13 +356,14 @@ private:
     }
 
       // Final alignment
-    case 8: {
+    case 80: {
       error_yaw = -std::atan2(yM2, xM2);
       if (std::abs(error_yaw) > 0.1) {
         zz = 0.5 * error_yaw;
       } else {
-        step_ = 9; // Next step
-        xx = zz = 0.0;
+        step_ = 9;
+        0 // Next step
+            xx = zz = 0.0;
         RCLCPP_INFO(this->get_logger(), "9/9 Docking using odometry");
         x1 = msg->pose.pose.position.x;
         y1 = msg->pose.pose.position.y;
@@ -360,14 +371,14 @@ private:
       break;
     }
       // Odom docking before lift
-    case 9: {
+    case 90: {
       error_distance = std::sqrt(std::pow(x1 - msg->pose.pose.position.x, 2) +
                                  std::pow(y1 - msg->pose.pose.position.y, 2));
       if (error_distance < dock_dis) {
         xx = 0.1;
         zz = 0.0;
       } else {
-        step_ = 10; // Next step
+        step_ = 100; // Next step
         xx = zz = 0.0;
       }
       break;
@@ -390,7 +401,7 @@ private:
       vel_msg.linear.x = xx;
       vel_msg.angular.z = zz;
       cmd_vel_publisher->publish(vel_msg);
-      if (step_ == 10) {
+      if (step_ == 100) {
         control = false;
         success = true;
       }
