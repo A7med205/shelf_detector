@@ -57,6 +57,8 @@ private:
   void odom_callback(const nav_msgs::msg::Odometry::SharedPtr msg) {
     current_x = msg->pose.pose.position.x;
     current_y = msg->pose.pose.position.y;
+    current_z = msg->pose.pose.orientation.z;
+    current_w = msg->pose.pose.orientation.w;
 
     tf2::Quaternion q(
         msg->pose.pose.orientation.x, msg->pose.pose.orientation.y,
@@ -81,8 +83,6 @@ private:
       // Finding closest end
       RCLCPP_INFO(this->get_logger(), "Finding closest end");
       next_waypoint(end_index, goal_index);
-      RCLCPP_INFO(this->get_logger(), "\nEnd is %d\nGoal is %d",
-                  end_index / 2 + 1, goal_index / 2 + 1);
       control_ = true;
       command_ = 2;
       RCLCPP_INFO(this->get_logger(), "Starting rotation");
@@ -97,7 +97,6 @@ private:
 
       yaw_error = angle_to_waypoint - yaw_;
       if (std::abs(yaw_error) > 0.1) {
-        // xx = 0.0;
         zz = (yaw_error > 0) ? std::max(0.5 * yaw_error, 0.2)
                              : std::min(0.5 * yaw_error, -0.2);
       } else {
@@ -119,50 +118,51 @@ private:
         waiting_ = true;
       }
 
-      distance_error = std::hypot(waypoints[goal_index] - current_x,
-                                  waypoints[goal_index + 1] - current_y);
+      // distance_error = std::hypot(waypoints[goal_index] - current_x,
+      //                             waypoints[goal_index + 1] - current_y);
 
       // Checking success and switching to next goal
-      if (success_ || (aborted_ && distance_error < 0.3)) {
+      if (success_ || aborted_) {
         if (end_index == 0) {
           RCLCPP_INFO(this->get_logger(), "Reached, moving to next");
-          goal_index = (goal_index == end_index) ? -10 : goal_index - 2;
+          goal_index = (goal_index == end_index) // || distance_error > 0.4)
+                           ? -10
+                           : goal_index - 2;
         } else if (end_index == waypoints.size() - 2) {
           RCLCPP_INFO(this->get_logger(), "Reached, moving to next");
           goal_index =
-              (goal_index == (waypoints.size() - 2)) ? -20 : goal_index + 2;
+              (goal_index == (waypoints.size() - 2)) // || distance_error > 0.4)
+                  ? -20
+                  : goal_index + 2;
         }
         waiting_ = false;
         success_ = false;
         aborted_ = false;
         control_ = true;
         command_ = 2;
-      } // else if (aborted_) {
-        // RCLCPP_INFO(this->get_logger(), "Round");
-        // command_ = 4;
-      //}
+      }
 
-      // Starting other direction round or ending search
-      if (goal_index == -10 && round_ == 1) {
+      // Starting second round or ending search
+      if (goal_index == -10) {
         RCLCPP_INFO(this->get_logger(), "Next round");
         end_index = waypoints.size() - 2;
         goal_index = 2;
         command_ = 2;
-        control_ = true;
-        success_ = false;
+        // control_ = true;
+        // success_ = false;
         round_ += 1;
-      } else if (goal_index == -20 && round_ == 1) {
+      } else if (goal_index == -20) {
         RCLCPP_INFO(this->get_logger(), "Next round");
         end_index = 0;
         goal_index = waypoints.size() - 4;
         command_ = 2;
-        control_ = true;
-        success_ = false;
+        // control_ = true;
+        // success_ = false;
         round_ += 1;
       }
 
-      if (goal_index < 0 && round_ > 2) {
-        RCLCPP_INFO(this->get_logger(), "Search successful");
+      if (round_ > 2) {
+        RCLCPP_INFO(this->get_logger(), "Search done");
         command_ = 4;
       }
 
@@ -175,7 +175,6 @@ private:
 
     if (control_) {
       geometry_msgs::msg::Twist cmd_msg;
-      // cmd_msg.linear.x = xx;
       cmd_msg.angular.z = zz;
       cmd_vel_publisher->publish(cmd_msg);
       if (command_ == 10) {
@@ -185,8 +184,8 @@ private:
   }
 
   void next_waypoint(int &end_index, int &goal_index) {
-    RCLCPP_INFO(this->get_logger(), "Calculating waypoint");
     // Determining the closest end waypoint
+    RCLCPP_INFO(this->get_logger(), "Calculating waypoint");
     double dist_to_first =
         std::hypot(waypoints[0] - current_x, waypoints[1] - current_y);
     double dist_to_last =
@@ -243,20 +242,17 @@ private:
     goal_msg.pose.header.stamp = this->get_clock()->now();
     goal_msg.pose.pose.position.x = x;
     goal_msg.pose.pose.position.y = y;
-    goal_msg.pose.pose.orientation.z = 0.0;
-    goal_msg.pose.pose.orientation.w = 1.0;
+    goal_msg.pose.pose.orientation.z = current_z;
+    goal_msg.pose.pose.orientation.w = current_w;
 
     RCLCPP_INFO(this->get_logger(), "Sending goal");
 
-    // Configuring goal options
+    // Configuring response and result callback
     auto send_goal_options = rclcpp_action::Client<
         nav2_msgs::action::NavigateToPose>::SendGoalOptions();
     send_goal_options.goal_response_callback =
         std::bind(&NavigateToPoseClient::goal_response_callback, this,
                   std::placeholders::_1);
-    /*send_goal_options.feedback_callback =
-        std::bind(&NavigateToPoseClient::feedback_callback, this,
-                  std::placeholders::_1, std::placeholders::_2);*/
     send_goal_options.result_callback = std::bind(
         &NavigateToPoseClient::result_callback, this, std::placeholders::_1);
 
@@ -273,15 +269,6 @@ private:
                   "Goal accepted by the server, waiting for result");
     }
   }
-
-  /*void feedback_callback(
-      GoalHandleNavigateToPose::SharedPtr,
-      const std::shared_ptr<const NavigateToPose::Feedback> feedback) {
-     RCLCPP_INFO(this->get_logger(), "Feedback: Current position (%.2f,
-     %.2f)",
-                 feedback->current_pose.pose.position.x,
-                 feedback->current_pose.pose.position.y);
-  }*/
 
   void result_callback(const GoalHandleNavigateToPose::WrappedResult &result) {
     switch (result.code) {
@@ -312,8 +299,8 @@ private:
   rclcpp::TimerBase::SharedPtr controller_;
 
   std::vector<double> waypoints;
-  double current_x, current_y, yaw_;
-  double distance_error, yaw_error, xx, zz;
+  double current_x, current_y, current_z, current_w, yaw_;
+  double distance_error, yaw_error, zz;
   int command_, end_index, goal_index, round_;
   bool control_, aborted_, success_, waiting_;
 };
