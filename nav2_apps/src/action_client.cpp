@@ -2,6 +2,7 @@
 #include "nav2_msgs/action/navigate_to_pose.hpp"
 #include "nav_msgs/msg/odometry.hpp"
 #include <cmath>
+#include <future>
 #include <nav2_apps/srv/go_to_loading.hpp>
 #include <rclcpp/rclcpp.hpp>
 #include <rclcpp_action/rclcpp_action.hpp>
@@ -10,6 +11,7 @@
 #include <tf2/LinearMath/Quaternion.h>
 
 using NavigateToPoseMsg = nav2_msgs::action::NavigateToPose;
+using GoToLoading = nav2_apps::srv::GoToLoading;
 using namespace std::chrono_literals;
 
 class NavigateToPoseClient : public rclcpp::Node {
@@ -21,8 +23,7 @@ public:
     // Initialize the action client
     act_client_ = rclcpp_action::create_client<NavigateToPoseMsg>(
         this, "/navigate_to_pose");
-    srv_client_ =
-        this->create_client<nav2_apps::srv::GoToLoading>("approach_shelf");
+    srv_client_ = this->create_client<GoToLoading>("approach_shelf");
 
     command_sub = this->create_subscription<std_msgs::msg::Int32>(
         "/command_topic", 10,
@@ -44,6 +45,7 @@ public:
     control_ = false;
     success_ = false;
     search_ = false;
+    srv_wait_ = false;
     round_ = 1;
 
     // Waiting for the /navigate_to_pose action server
@@ -77,7 +79,7 @@ private:
     if (msg->data == 1) {
       RCLCPP_INFO(this->get_logger(), "I received: '%d'", msg->data);
       command_ = 1;
-      search_ = true;
+      srv_wait_ = false;
       waypoints = {2.27, -2.04, 0.92, -2.09, 0.68, 0.04,
                    2.49, 0.10,  4.39, 0.11,  5.46, -0.03};
     }
@@ -134,12 +136,13 @@ private:
           goal_index = (goal_index == end_index) // || distance_error > 0.4)
                            ? -10
                            : goal_index - 2;
-        } else if (end_index == waypoints.size() - 2) {
+        } else if (static_cast<unsigned int>(end_index) ==
+                   waypoints.size() - 2) {
           RCLCPP_INFO(this->get_logger(), "Reached, moving to next");
-          goal_index =
-              (goal_index == (waypoints.size() - 2)) // || distance_error > 0.4)
-                  ? -20
-                  : goal_index + 2;
+          goal_index = (static_cast<unsigned int>(goal_index) ==
+                        (waypoints.size() - 2)) // || distance_error > 0.4)
+                           ? -20
+                           : goal_index + 2;
         }
         nav_wait_ = false;
         success_ = false;
@@ -165,23 +168,14 @@ private:
         command_ = 0;
       }
 
-      if (search_) {
-        auto request = std::make_shared<nav2_apps::srv::GoToLoading::Request>();
+      if (!srv_wait_) {
+        auto request = std::make_shared<GoToLoading::Request>();
         request->attach_to_shelf = 1;
-        auto result_future = srv_client_->async_send_request(request);
 
-        if (result_future.wait_for(100ms) == std::future_status::ready) {
-          auto response = result_future.get();
-          if (response->complete) {
-            RCLCPP_INFO(this->get_logger(), "Search result: %d",
-                        response->complete);
-            shelf_ = response->complete;
-            search_ = false;
-            command_ = 0;
-          }
-        } else {
-          RCLCPP_WARN(this->get_logger(), "Service call timed out.");
-        }
+        auto result_future = srv_client_->async_send_request(
+            request, std::bind(&NavigateToPoseClient::srv_clbk, this,
+                               std::placeholders::_1));
+        srv_wait_ = true;
       }
 
       break;
@@ -272,7 +266,7 @@ private:
         std::bind(&NavigateToPoseClient::goal_response_callback, this,
                   std::placeholders::_1);
     send_goal_options.result_callback = std::bind(
-        &NavigateToPoseClient::result_callback, this, std::placeholders::_1);
+        &NavigateToPoseClient::act_result_clbk, this, std::placeholders::_1);
 
     // Send the goal
     act_client_->async_send_goal(goal_msg, send_goal_options);
@@ -288,7 +282,7 @@ private:
     }
   }
 
-  void result_callback(const GoalHandleNavigateToPose::WrappedResult &result) {
+  void act_result_clbk(const GoalHandleNavigateToPose::WrappedResult &result) {
     switch (result.code) {
     case rclcpp_action::ResultCode::SUCCEEDED:
       RCLCPP_INFO(this->get_logger(), "Goal succeeded!");
@@ -305,12 +299,28 @@ private:
       RCLCPP_INFO(this->get_logger(), "Unknown result code");
       break;
     }
+  }
 
-    // rclcpp::shutdown();
+  void srv_clbk(rclcpp::Client<GoToLoading>::SharedFuture future) {
+    auto status = future.wait_for(1s);
+
+    if (status == std::future_status::ready) {
+      auto response = future.get();
+      if (response->complete) {
+        RCLCPP_INFO(this->get_logger(), "Search result: %d",
+                    response->complete);
+        shelf_ = response->complete;
+        command_ = 0;
+      }
+
+      srv_wait_ = false;
+    } else {
+      RCLCPP_INFO(this->get_logger(), "Service In-Progress...");
+    }
   }
 
   rclcpp_action::Client<NavigateToPoseMsg>::SharedPtr act_client_;
-  rclcpp::Client<nav2_apps::srv::GoToLoading>::SharedPtr srv_client_;
+  rclcpp::Client<GoToLoading>::SharedPtr srv_client_;
   rclcpp::Subscription<std_msgs::msg::Int32>::SharedPtr command_sub;
   rclcpp::Subscription<nav_msgs::msg::Odometry>::SharedPtr odom_sub;
   rclcpp::Publisher<geometry_msgs::msg::Twist>::SharedPtr cmd_vel_publisher;
@@ -320,7 +330,7 @@ private:
   double current_x, current_y, current_z, current_w, yaw_;
   double yaw_error, zz;
   int command_, end_index, goal_index, round_;
-  bool control_, aborted_, success_, nav_wait_, search_, shelf_;
+  bool control_, aborted_, success_, nav_wait_, search_, srv_wait_, shelf_;
 };
 
 int main(int argc, char **argv) {
