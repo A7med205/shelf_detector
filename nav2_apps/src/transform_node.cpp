@@ -91,7 +91,7 @@ private:
         if (success) {
           break;
         }
-        rclcpp::sleep_for(std::chrono::seconds(0.2));
+        std::this_thread::sleep_for(std::chrono::milliseconds(200));
       }
       response->complete = true;
       RCLCPP_INFO(this->get_logger(), "Finished attachment with cart");
@@ -295,10 +295,9 @@ private:
         zz = (error_yaw > 0) ? std::max(0.5 * error_yaw, 0.1)
                              : std::min(0.5 * error_yaw, -0.1);
       } else {
-        step_ = 5;
-        0 // Next step
-            RCLCPP_INFO(this->get_logger(),
-                        "5/9 Correcting for lidar position");
+        step_ = 50;
+        // Next step
+        RCLCPP_INFO(this->get_logger(), "5/9 Correcting for lidar position");
         xx = zz = 0.0;
         x1 = msg->pose.pose.position.x;
         y1 = msg->pose.pose.position.y;
@@ -314,9 +313,9 @@ private:
         xx = 0.1;
         zz = 0.0;
       } else {
-        step_ = 6;
-        0 // Next step
-            xx = zz = 0.0;
+        step_ = 60;
+        // Next step
+        xx = zz = 0.0;
         RCLCPP_INFO(this->get_logger(), "6/9 Rotating towards TF");
       }
       break;
@@ -329,9 +328,9 @@ private:
         zz = (error_yaw > 0) ? std::max(0.5 * error_yaw, 0.1)
                              : std::min(0.5 * error_yaw, -0.1);
       } else {
-        step_ = 7;
-        0 // Next step
-            xx = zz = 0.0;
+        step_ = 70;
+        // Next step
+        xx = zz = 0.0;
         RCLCPP_INFO(this->get_logger(), "7/9 Moving towards TF");
       }
       break;
@@ -346,9 +345,9 @@ private:
         zz = (error_yaw > 0) ? std::max(0.5 * error_yaw, 0.1)
                              : std::min(0.5 * error_yaw, -0.1);
       } else {
-        step_ = 8;
-        0 // Next step
-            xx = zz = 0.0;
+        step_ = 80;
+        // Next step
+        xx = zz = 0.0;
         // RCLCPP_INFO(this->get_logger(), "Starting final alignment");
         RCLCPP_INFO(this->get_logger(), "8/9 Final alignment");
       }
@@ -361,9 +360,9 @@ private:
       if (std::abs(error_yaw) > 0.1) {
         zz = 0.5 * error_yaw;
       } else {
-        step_ = 9;
-        0 // Next step
-            xx = zz = 0.0;
+        step_ = 90;
+        // Next step
+        xx = zz = 0.0;
         RCLCPP_INFO(this->get_logger(), "9/9 Docking using odometry");
         x1 = msg->pose.pose.position.x;
         y1 = msg->pose.pose.position.y;

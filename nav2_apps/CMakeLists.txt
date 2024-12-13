@@ -35,6 +35,15 @@ add_executable(action_client src/action_client.cpp)
 add_executable(transform_node src/transform_node.cpp)
 add_executable(service_client src/service_client.cpp)
 
+ament_target_dependencies(transform_node
+  rclcpp
+  geometry_msgs
+  nav_msgs
+  sensor_msgs
+  tf2_ros
+  tf2
+)
+
 ament_target_dependencies(action_client
   rclcpp
   rclcpp_action
@@ -45,15 +54,6 @@ ament_target_dependencies(action_client
   std_msgs
 )
 
-ament_target_dependencies(transform_node
-  rclcpp
-  geometry_msgs
-  nav_msgs
-  sensor_msgs
-  tf2_ros
-  tf2
-)
-
 ament_target_dependencies(service_client
   rclcpp
   nav_msgs
@@ -62,6 +62,9 @@ ament_target_dependencies(service_client
 ament_export_dependencies(rosidl_default_runtime)
 
 rosidl_target_interfaces(transform_node
+  ${PROJECT_NAME} "rosidl_typesupport_cpp")
+
+rosidl_target_interfaces(action_client
   ${PROJECT_NAME} "rosidl_typesupport_cpp")
 
 rosidl_target_interfaces(service_client
