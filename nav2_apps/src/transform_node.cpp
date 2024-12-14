@@ -379,6 +379,34 @@ private:
       } else {
         step_ = 100; // Next step
         xx = zz = 0.0;
+        auto elevator_msg = std_msgs::msg::String();
+        elevator_publisher->publish(elevator_msg);
+        start_time = this->get_clock()->now();
+        RCLCPP_INFO(this->get_logger(), "Lifting cart");
+      }
+      break;
+    }
+
+    case 100: {
+      end_time = this->get_clock()->now();
+      if ((end_time - start_time).seconds() > 5) {
+        x1 = msg->pose.pose.position.x;
+        y1 = msg->pose.pose.position.y;
+        step_ = 110;
+      }
+
+      break;
+    }
+
+    case 110: {
+      error_distance = std::sqrt(std::pow(x1 - msg->pose.pose.position.x, 2) +
+                                 std::pow(y1 - msg->pose.pose.position.y, 2));
+      if (error_distance < 0.5) {
+        xx = -0.1;
+        zz = 0.0;
+      } else {
+        step_ = 120; // Next step
+        xx = zz = 0.0;
       }
       break;
     }
@@ -387,20 +415,12 @@ private:
       break;
     }
 
-    /*if (approach == "lift") {
-      auto elevator_msg = std_msgs::msg::String();
-      elevator_publisher->publish(elevator_msg);
-      start_time = this->get_clock()->now();
-      RCLCPP_INFO(this->get_logger(), "Lifting cart");
-      approach = "wait";
-    }*/
-
     if (control) {
       auto vel_msg = geometry_msgs::msg::Twist();
       vel_msg.linear.x = xx;
       vel_msg.angular.z = zz;
       cmd_vel_publisher->publish(vel_msg);
-      if (step_ == 100) {
+      if (step_ == 120) {
         control = false;
         success = true;
       }

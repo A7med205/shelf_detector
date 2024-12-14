@@ -208,7 +208,7 @@ private:
       }
       if (round_ > 2) {
         RCLCPP_INFO(this->get_logger(), "Shelf wasn't found");
-        command_ = 0;
+        command_ = 0; // Add 3 options <-----------///////
       }
 
       if (!srv_wait_) {
@@ -221,6 +221,21 @@ private:
         srv_wait_ = true;
       }
 
+      break;
+    }
+
+    case 4: {
+      // resize and start delivering <-----------///////
+      break;
+    }
+
+    case 5: {
+      // deliver and start lowering <-----------///////
+      break;
+    }
+
+    case 5: {
+      // backup and switch to return <-----------///////
       break;
     }
 
@@ -374,7 +389,6 @@ private:
         shelf_ = response->complete;
         command_ = 0;
       }
-
       srv_wait_ = false;
     } else {
       RCLCPP_INFO(this->get_logger(), "Service In-Progress...");
