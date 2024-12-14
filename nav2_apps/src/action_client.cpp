@@ -96,7 +96,11 @@ private:
 
   void control_callback() {
     switch (command_) {
+    // Search mode
     case 1: {
+      // Canceling any ongoing goals
+      cancel_goal();
+
       // Finding closest end
       RCLCPP_INFO(this->get_logger(), "Finding closest end");
       next_waypoint(end_index, goal_index);
@@ -105,7 +109,11 @@ private:
       break;
     }
 
+    // Return to home mode
     case -1: {
+      // Canceling any ongoing goals
+      cancel_goal();
+
       // Finding closest end
       RCLCPP_INFO(this->get_logger(), "Finding closest direction to home");
       waypoints = {2.27, -2.04, 0.92, -2.09, 0.04, 0.06};
@@ -147,6 +155,7 @@ private:
       } else {
         zz = 0.0;
         control_ = false;
+        nav_wait_ = false;
         command_ = 3;
         RCLCPP_INFO(this->get_logger(), "Orientation reached, sending goal");
       }
@@ -231,6 +240,7 @@ private:
 
   void next_waypoint(int &end_index, int &goal_index) {
     // Determining the closest end waypoint
+    double target_x, target_y;
     if (!home_) {
       RCLCPP_INFO(this->get_logger(), "Calculating waypoint");
       double dist_to_first =
@@ -239,18 +249,20 @@ private:
           std::hypot(waypoints[waypoints.size() - 2] - current_x,
                      waypoints[waypoints.size() - 1] - current_y);
 
-      double target_x = (dist_to_first < dist_to_last)
+      /* target_x = (dist_to_first < dist_to_last)
                             ? waypoints[0]
                             : waypoints[waypoints.size() - 2];
-      double target_y = (dist_to_first < dist_to_last)
+       target_y = (dist_to_first < dist_to_last)
                             ? waypoints[1]
-                            : waypoints[waypoints.size() - 1];
+                            : waypoints[waypoints.size() - 1];*/
 
       // End x index
       end_index = (dist_to_first < dist_to_last) ? 0 : waypoints.size() - 2;
-      goal_index = end_index;
+      /*goal_index = end_index;*/
     } else {
       end_index = waypoints.size() - 2;
+      target_x = waypoints[waypoints.size() - 2];
+      target_y = waypoints[waypoints.size() - 2];
     }
 
     // Finding the closest waypoint in the direction of the closest end
@@ -318,6 +330,18 @@ private:
       RCLCPP_INFO(this->get_logger(),
                   "Goal accepted by the server, waiting for result");
     }
+    goal_handle_ = goal_handle;
+  }
+
+  void cancel_goal() {
+    if (goal_handle_) {
+      RCLCPP_INFO(this->get_logger(), "Cancelling goal...");
+      auto cancel_future = act_client_->async_cancel_goal(goal_handle_);
+      cancel_future.wait();
+      RCLCPP_INFO(this->get_logger(), "Cancel request sent.");
+    } else {
+      RCLCPP_WARN(this->get_logger(), "No active goal to cancel.");
+    }
   }
 
   void act_result_clbk(const GoalHandleNavigateToPose::WrappedResult &result) {
@@ -358,6 +382,7 @@ private:
   }
 
   rclcpp_action::Client<NavigateToPoseMsg>::SharedPtr act_client_;
+  rclcpp_action::ClientGoalHandle<NavigateToPoseMsg>::SharedPtr goal_handle_;
   rclcpp::Client<GoToLoading>::SharedPtr srv_client_;
   rclcpp::Subscription<std_msgs::msg::Int32>::SharedPtr command_sub;
   rclcpp::Subscription<nav_msgs::msg::Odometry>::SharedPtr odom_sub;
