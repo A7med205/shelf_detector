@@ -46,6 +46,7 @@ public:
     success_ = false;
     search_ = false;
     srv_wait_ = false;
+    home_ = false;
     round_ = 1;
 
     // Waiting for the /navigate_to_pose action server
@@ -79,9 +80,17 @@ private:
     if (msg->data == 1) {
       RCLCPP_INFO(this->get_logger(), "I received: '%d'", msg->data);
       command_ = 1;
+      control_ = true;
       srv_wait_ = false;
       waypoints = {2.27, -2.04, 0.92, -2.09, 0.68, 0.04,
                    2.49, 0.10,  4.39, 0.11,  5.46, -0.03};
+    } else if (msg->data == 2) {
+      RCLCPP_INFO(this->get_logger(), "I received: '%d'", msg->data);
+      command_ = -1;
+      home_ = true;
+      control_ = true;
+      srv_wait_ = true;
+      round_ = 2;
     }
   }
 
@@ -91,7 +100,35 @@ private:
       // Finding closest end
       RCLCPP_INFO(this->get_logger(), "Finding closest end");
       next_waypoint(end_index, goal_index);
-      control_ = true;
+      command_ = 2;
+      RCLCPP_INFO(this->get_logger(), "Starting rotation");
+      break;
+    }
+
+    case -1: {
+      // Finding closest end
+      RCLCPP_INFO(this->get_logger(), "Finding closest direction to home");
+      waypoints = {2.27, -2.04, 0.92, -2.09, 0.04, 0.06};
+      next_waypoint(end_index, goal_index);
+      std::pair<double, double> point_1 = {waypoints[goal_index],
+                                           waypoints[goal_index + 1]};
+
+      waypoints = {5.46, -0.03, 4.39, 0.11, 2.49, 0.10, 0.68, 0.04, 0.04, 0.06};
+      next_waypoint(end_index, goal_index);
+      std::pair<double, double> point_2 = {waypoints[goal_index],
+                                           waypoints[goal_index + 1]};
+
+      double dist_to_point_1 =
+          std::hypot(point_1.first - current_x, point_1.second - current_y);
+
+      double dist_to_point_2 =
+          std::hypot(point_2.first - current_x, point_2.second - current_y);
+
+      if (dist_to_point_1 < dist_to_point_2) {
+        waypoints = {2.27, -2.04, 0.92, -2.09, 0.04, 0.06};
+      }
+      end_index = waypoints.size() - 2;
+
       command_ = 2;
       RCLCPP_INFO(this->get_logger(), "Starting rotation");
       break;
@@ -125,9 +162,6 @@ private:
         RCLCPP_INFO(this->get_logger(), "Goal sent");
         nav_wait_ = true;
       }
-
-      // distance_error = std::hypot(waypoints[goal_index] - current_x,
-      // waypoints[goal_index + 1] - current_y);
 
       // Checking success and switching to next goal
       if (success_ || aborted_) {
@@ -197,23 +231,27 @@ private:
 
   void next_waypoint(int &end_index, int &goal_index) {
     // Determining the closest end waypoint
-    RCLCPP_INFO(this->get_logger(), "Calculating waypoint");
-    double dist_to_first =
-        std::hypot(waypoints[0] - current_x, waypoints[1] - current_y);
-    double dist_to_last =
-        std::hypot(waypoints[waypoints.size() - 2] - current_x,
-                   waypoints[waypoints.size() - 1] - current_y);
+    if (!home_) {
+      RCLCPP_INFO(this->get_logger(), "Calculating waypoint");
+      double dist_to_first =
+          std::hypot(waypoints[0] - current_x, waypoints[1] - current_y);
+      double dist_to_last =
+          std::hypot(waypoints[waypoints.size() - 2] - current_x,
+                     waypoints[waypoints.size() - 1] - current_y);
 
-    double target_x = (dist_to_first < dist_to_last)
-                          ? waypoints[0]
-                          : waypoints[waypoints.size() - 2];
-    double target_y = (dist_to_first < dist_to_last)
-                          ? waypoints[1]
-                          : waypoints[waypoints.size() - 1];
+      double target_x = (dist_to_first < dist_to_last)
+                            ? waypoints[0]
+                            : waypoints[waypoints.size() - 2];
+      double target_y = (dist_to_first < dist_to_last)
+                            ? waypoints[1]
+                            : waypoints[waypoints.size() - 1];
 
-    // End x index
-    end_index = (dist_to_first < dist_to_last) ? 0 : waypoints.size() - 2;
-    goal_index = end_index;
+      // End x index
+      end_index = (dist_to_first < dist_to_last) ? 0 : waypoints.size() - 2;
+      goal_index = end_index;
+    } else {
+      end_index = waypoints.size() - 2;
+    }
 
     // Finding the closest waypoint in the direction of the closest end
     double min_distance = std::numeric_limits<double>::max();
@@ -330,7 +368,8 @@ private:
   double current_x, current_y, current_z, current_w, yaw_;
   double yaw_error, zz;
   int command_, end_index, goal_index, round_;
-  bool control_, aborted_, success_, nav_wait_, search_, srv_wait_, shelf_;
+  bool home_, control_, aborted_, success_, nav_wait_, search_, srv_wait_,
+      shelf_;
 };
 
 int main(int argc, char **argv) {
