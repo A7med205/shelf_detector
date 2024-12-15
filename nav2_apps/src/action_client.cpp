@@ -74,19 +74,9 @@ private:
     if (msg->data == 1) {
       RCLCPP_INFO(this->get_logger(), "I received: '%d'", msg->data);
       cmd = Command::FindGoal;
-      search_ = false;
-      control_ = true;
-      srv_wait_ = false;
-      round_ = 1;
-      waypoints = {2.27, -2.04, 0.92, -2.09, 0.68, 0.04,
-                   2.49, 0.10,  4.39, 0.11,  5.46, -0.03};
     } else if (msg->data == 2) {
       RCLCPP_INFO(this->get_logger(), "I received: '%d'", msg->data);
       cmd = Command::HomeGoal;
-      search_ = false;
-      control_ = true;
-      srv_wait_ = true;
-      round_ = 2;
     }
   }
 
@@ -98,10 +88,19 @@ private:
       cancel_goal();
 
       // Finding closest end
+      waypoints = {2.27, -2.04, 0.92, -2.09, 0.68, 0.04,
+                   2.49, 0.10,  4.39, 0.11,  5.46, -0.03};
       RCLCPP_INFO(this->get_logger(), "Finding closest end");
       next_waypoint(end_index, goal_index);
+
+      // Setting opto=ions
+      search_ = true;
+      control_ = true;
+      srv_wait_ = false;
+      round_ = 1;
       cmd = Command::Rotate;
       RCLCPP_INFO(this->get_logger(), "Starting rotation");
+
       break;
     }
 
@@ -133,8 +132,14 @@ private:
       }
       end_index = waypoints.size() - 2;
 
+      // Setting options
+      search_ = false;
+      control_ = true;
+      srv_wait_ = true;
+      round_ = 2;
       cmd = Command::Rotate;
       RCLCPP_INFO(this->get_logger(), "Starting rotation");
+
       break;
     }
 
@@ -203,8 +208,12 @@ private:
         round_ += 1;
       }
       if (round_ > 2) {
-        RCLCPP_INFO(this->get_logger(), "Shelf wasn't found");
-        command_ = 0; // Add 3 options <-----------///////
+        if (search_) {
+          RCLCPP_INFO(this->get_logger(), "Shelf wasn't found");
+          cmd = Command::None;
+        } else {
+          cmd = (round_ == 3) ? Command::None : Command::HomeGoal;
+        }
       }
 
       // Trying to detect shelf
@@ -221,17 +230,26 @@ private:
       break;
     }
 
-    case 4: {
+    case Command::Attach: {
       // Attach, resize footprint and go to deliver <-----------///////
+      if (!srv_wait_) {
+        auto request = std::make_shared<GoToLoading::Request>();
+        request->attach_to_shelf = 10;
+
+        auto result_future = srv_client_->async_send_request(
+            request, std::bind(&NavigateToPoseClient::attach_clbk, this,
+                               std::placeholders::_1));
+        srv_wait_ = true;
+      }
       break;
     }
 
-    case 5: {
+    case Command::Lower: {
       // Start lowering <-----------///////
       break;
     }
 
-    case 7: {
+    case Command::Backup: {
       // backup and go to home <-----------///////
       break;
     }
@@ -384,9 +402,25 @@ private:
         RCLCPP_INFO(this->get_logger(), "Search result: %d",
                     response->complete);
         shelf_ = response->complete;
-        cmd = Command::None;
+        cmd = Command::Attach;
       }
       srv_wait_ = false;
+    } else {
+      RCLCPP_INFO(this->get_logger(), "Service In-Progress...");
+    }
+  }
+
+  void attach_clbk(rclcpp::Client<GoToLoading>::SharedFuture future) {
+    auto status = future.wait_for(1s);
+
+    if (status == std::future_status::ready) {
+      auto response = future.get();
+      if (response->complete) {
+        RCLCPP_INFO(this->get_logger(), "Search result: %d",
+                    response->complete);
+        shelf_ = response->complete;
+        cmd = Command::None;
+      }
     } else {
       RCLCPP_INFO(this->get_logger(), "Service In-Progress...");
     }
