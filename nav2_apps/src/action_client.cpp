@@ -35,8 +35,8 @@ public:
         std::bind(&NavigateToPoseClient::odom_callback, this,
                   std::placeholders::_1));
 
-    cmd_vel_publisher = this->create_publisher<geometry_msgs::msg::Twist>(
-        "/diffbot_base_controller/cmd_vel_unstamped", 10);
+    cmd_vel_publisher =
+        this->create_publisher<geometry_msgs::msg::Twist>("/cmd_vel", 10);
     controller_ = this->create_wall_timer(
         100ms, std::bind(&NavigateToPoseClient::control_callback, this));
 
@@ -73,31 +73,34 @@ private:
   void command_callback(const std_msgs::msg::Int32::SharedPtr msg) {
     if (msg->data == 1) {
       RCLCPP_INFO(this->get_logger(), "I received: '%d'", msg->data);
-      cmd = Command::FindGoal;
+      cmd = Command::SearchGoal;
     } else if (msg->data == 2) {
       RCLCPP_INFO(this->get_logger(), "I received: '%d'", msg->data);
       cmd = Command::HomeGoal;
+    } else if (msg->data == 0) {
+      RCLCPP_INFO(this->get_logger(), "I received: '%d'", msg->data);
+      cmd = Command::None;
     }
   }
 
   void control_callback() {
     switch (cmd) {
     // Search mode
-    case Command::FindGoal: {
-      // Canceling any ongoing goals
-      cancel_goal();
-
-      // Finding closest end
-      waypoints = {2.27, -2.04, 0.92, -2.09, 0.68, 0.04,
-                   2.49, 0.10,  4.39, 0.11,  5.46, -0.03};
-      RCLCPP_INFO(this->get_logger(), "Finding closest end");
-      next_waypoint(end_index, goal_index);
-
-      // Setting opto=ions
+    case Command::SearchGoal: {
+      // Setting optotions
       search_ = true;
       control_ = true;
       srv_wait_ = false;
       round_ = 1;
+
+      // Finding closest end
+      // waypoints = {2.27, -2.04, 0.92, -2.09, 0.68, 0.04,
+      //             2.49, 0.10,  4.39, 0.11,  5.46, -0.03};
+      waypoints = {-0.02, -2.01, -0.01, -0.04, 1.09,
+                   0.01,  2.45,  0.00,  3.56,  -0.21};
+      RCLCPP_INFO(this->get_logger(), "Finding closest end");
+      next_waypoint(end_index, goal_index);
+
       cmd = Command::Rotate;
       RCLCPP_INFO(this->get_logger(), "Starting rotation");
 
@@ -106,17 +109,25 @@ private:
 
     // Return to home mode
     case Command::HomeGoal: {
-      // Canceling any ongoing goals
-      cancel_goal();
+      // Setting options
+      search_ = false;
+      control_ = true;
+      srv_wait_ = true;
+      round_ = 2;
 
       // Finding closest end
       RCLCPP_INFO(this->get_logger(), "Finding closest direction to home");
-      waypoints = {2.27, -2.04, 0.92, -2.09, 0.04, 0.06};
+      // waypoints = {2.27, -2.04, 0.92, -2.09, 0.04, 0.06};
+      waypoints = {-0.02, -2.01, -0.01, -0.04, -0.58, 0.06};
       next_waypoint(end_index, goal_index);
       std::pair<double, double> point_1 = {waypoints[goal_index],
                                            waypoints[goal_index + 1]};
+      int goal_1 = goal_index;
 
-      waypoints = {5.46, -0.03, 4.39, 0.11, 2.49, 0.10, 0.68, 0.04, 0.04, 0.06};
+      // waypoints = {5.46, -0.03, 4.39, 0.11, 2.49, 0.10, 0.68, 0.04, 0.04,
+      // 0.06};
+      waypoints = {3.56, -0.21, 2.45,  0.00,  1.09,
+                   0.01, -0.01, -0.04, -0.58, 0.06};
       next_waypoint(end_index, goal_index);
       std::pair<double, double> point_2 = {waypoints[goal_index],
                                            waypoints[goal_index + 1]};
@@ -128,15 +139,12 @@ private:
           std::hypot(point_2.first - current_x, point_2.second - current_y);
 
       if (dist_to_point_1 < dist_to_point_2) {
-        waypoints = {2.27, -2.04, 0.92, -2.09, 0.04, 0.06};
+        // waypoints = {2.27, -2.04, 0.92, -2.09, 0.04, 0.06};
+        waypoints = {-0.02, -2.01, -0.01, -0.04, -0.58, 0.06};
+        end_index = waypoints.size() - 2;
+        goal_index = goal_1;
       }
-      end_index = waypoints.size() - 2;
 
-      // Setting options
-      search_ = false;
-      control_ = true;
-      srv_wait_ = true;
-      round_ = 2;
       cmd = Command::Rotate;
       RCLCPP_INFO(this->get_logger(), "Starting rotation");
 
@@ -144,6 +152,11 @@ private:
     }
 
     case Command::Rotate: {
+      // Checking for ongoing goal
+      if (nav_wait_ == true && !success_ && !aborted_) {
+        break;
+      }
+
       // Rotating towards goal
       double angle_to_waypoint =
           std::atan2(waypoints[goal_index + 1] - current_y,
@@ -212,7 +225,7 @@ private:
           RCLCPP_INFO(this->get_logger(), "Shelf wasn't found");
           cmd = Command::None;
         } else {
-          cmd = (round_ == 3) ? Command::None : Command::HomeGoal;
+          cmd = (round_ == 3) ? Command::None : Command::Lower;
         }
       }
 
@@ -279,20 +292,19 @@ private:
           std::hypot(waypoints[waypoints.size() - 2] - current_x,
                      waypoints[waypoints.size() - 1] - current_y);
 
-      /* target_x = (dist_to_first < dist_to_last)
-                            ? waypoints[0]
-                            : waypoints[waypoints.size() - 2];
-       target_y = (dist_to_first < dist_to_last)
-                            ? waypoints[1]
-                            : waypoints[waypoints.size() - 1];*/
+      target_x = (dist_to_first < dist_to_last)
+                     ? waypoints[0]
+                     : waypoints[waypoints.size() - 2];
+      target_y = (dist_to_first < dist_to_last)
+                     ? waypoints[1]
+                     : waypoints[waypoints.size() - 1];
 
       // End x index
       end_index = (dist_to_first < dist_to_last) ? 0 : waypoints.size() - 2;
-      /*goal_index = end_index;*/
     } else {
       end_index = waypoints.size() - 2;
       target_x = waypoints[waypoints.size() - 2];
-      target_y = waypoints[waypoints.size() - 2];
+      target_y = waypoints[waypoints.size() - 1];
     }
 
     // Finding the closest waypoint in the direction of the closest end
@@ -360,18 +372,6 @@ private:
       RCLCPP_INFO(this->get_logger(),
                   "Goal accepted by the server, waiting for result");
     }
-    goal_handle_ = goal_handle;
-  }
-
-  void cancel_goal() {
-    if (goal_handle_) {
-      RCLCPP_INFO(this->get_logger(), "Cancelling goal...");
-      auto cancel_future = act_client_->async_cancel_goal(goal_handle_);
-      cancel_future.wait();
-      RCLCPP_INFO(this->get_logger(), "Cancel request sent.");
-    } else {
-      RCLCPP_WARN(this->get_logger(), "No active goal to cancel.");
-    }
   }
 
   void act_result_clbk(const GoalHandleNavigateToPose::WrappedResult &result) {
@@ -427,7 +427,6 @@ private:
   }
 
   rclcpp_action::Client<NavigateToPoseMsg>::SharedPtr act_client_;
-  rclcpp_action::ClientGoalHandle<NavigateToPoseMsg>::SharedPtr goal_handle_;
   rclcpp::Client<GoToLoading>::SharedPtr srv_client_;
   rclcpp::Subscription<std_msgs::msg::Int32>::SharedPtr command_sub;
   rclcpp::Subscription<nav_msgs::msg::Odometry>::SharedPtr odom_sub;
@@ -436,7 +435,7 @@ private:
 
   enum class Command {
     None,
-    FindGoal,
+    SearchGoal,
     HomeGoal,
     DeliverGoal,
     Rotate,
