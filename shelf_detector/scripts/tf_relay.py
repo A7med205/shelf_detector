@@ -10,14 +10,12 @@ class TfRelayNode(Node):
         super().__init__('tf_relay_node')
 
         # QoS for subscribing to /tf 
-        # Many tf publishers use TRANSIENT_LOCAL durability so late joiners get transforms.
-        # We'll match that here.
         tf_sub_qos = QoSProfile(depth=10)
         tf_sub_qos.durability = QoSDurabilityPolicy.VOLATILE
         tf_sub_qos.reliability = QoSReliabilityPolicy.RELIABLE
 
         # QoS for publishing /tf_relay 
-        # Use a more lenient QoS that might be compatible with rosbridge (e.g., VOLATILE)
+        # Using a more lenient QoS for rosbridge  compatiblity
         tf_pub_qos = QoSProfile(depth=10)
         tf_pub_qos.durability = QoSDurabilityPolicy.TRANSIENT_LOCAL
         tf_pub_qos.reliability = QoSReliabilityPolicy.RELIABLE
@@ -38,7 +36,7 @@ class TfRelayNode(Node):
         self.get_logger().info('TF Relay Node started, relaying /tf -> /tf_relay with adjusted QoS.')
 
     def tf_callback(self, msg):
-        # Simply relay the message to /tf_relay
+        # Relaying the message to /tf_relay
         self.tf_publisher.publish(msg)
 
 

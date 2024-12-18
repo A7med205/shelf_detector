@@ -7,8 +7,8 @@
 #include <cmath>
 #include <geometry_msgs/msg/point.hpp>
 #include <geometry_msgs/msg/transform_stamped.hpp>
-#include <nav2_apps/srv/go_to_loading.hpp>
 #include <rclcpp/rclcpp.hpp>
+#include <shelf_detector/srv/go_to_loading.hpp>
 #include <tf2/LinearMath/Matrix3x3.h>
 #include <tf2/LinearMath/Quaternion.h>
 #include <tf2_ros/transform_broadcaster.h>
@@ -51,7 +51,7 @@ public:
     }
 
     // Services, subscribers, and publishers
-    service_ = this->create_service<nav2_apps::srv::GoToLoading>(
+    service_ = this->create_service<shelf_detector::srv::GoToLoading>(
         "approach_shelf",
         std::bind(&ApproachService::service_callback, this,
                   std::placeholders::_1, std::placeholders::_2),
@@ -76,8 +76,8 @@ public:
 
 private:
   void service_callback(
-      const std::shared_ptr<nav2_apps::srv::GoToLoading::Request> request,
-      std::shared_ptr<nav2_apps::srv::GoToLoading::Response> response) {
+      const std::shared_ptr<shelf_detector::srv::GoToLoading::Request> request,
+      std::shared_ptr<shelf_detector::srv::GoToLoading::Response> response) {
     RCLCPP_INFO(this->get_logger(), "Service called");
     if (request->attach_to_shelf == 1) {
       response->complete = shelf_;
@@ -432,7 +432,7 @@ private:
   rclcpp::CallbackGroup::SharedPtr scan_callback_group_;
   rclcpp::CallbackGroup::SharedPtr odom_callback_group_;
 
-  rclcpp::Service<nav2_apps::srv::GoToLoading>::SharedPtr service_;
+  rclcpp::Service<shelf_detector::srv::GoToLoading>::SharedPtr service_;
   std::shared_ptr<tf2_ros::TransformBroadcaster> tf_broadcaster_;
   rclcpp::Subscription<sensor_msgs::msg::LaserScan>::SharedPtr scan_subscriber;
   rclcpp::Subscription<nav_msgs::msg::Odometry>::SharedPtr odom_subscriber;

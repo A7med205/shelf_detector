@@ -1,17 +1,20 @@
 #include "geometry_msgs/msg/twist.hpp"
 #include "nav2_msgs/action/navigate_to_pose.hpp"
 #include "nav_msgs/msg/odometry.hpp"
+#include "rcl_interfaces/srv/set_parameters.hpp"
+#include "rclcpp/parameter.hpp"
 #include <cmath>
 #include <future>
-#include <nav2_apps/srv/go_to_loading.hpp>
 #include <rclcpp/rclcpp.hpp>
 #include <rclcpp_action/rclcpp_action.hpp>
+#include <shelf_detector/srv/go_to_loading.hpp>
 #include <std_msgs/msg/int32.hpp>
+#include <std_msgs/msg/string.hpp>
 #include <tf2/LinearMath/Matrix3x3.h>
 #include <tf2/LinearMath/Quaternion.h>
 
 using NavigateToPoseMsg = nav2_msgs::action::NavigateToPose;
-using GoToLoading = nav2_apps::srv::GoToLoading;
+using GoToLoading = shelf_detector::srv::GoToLoading;
 using namespace std::chrono_literals;
 
 class NavigateToPoseClient : public rclcpp::Node {
@@ -37,6 +40,12 @@ public:
 
     cmd_vel_publisher =
         this->create_publisher<geometry_msgs::msg::Twist>("/cmd_vel", 10);
+    elevator_publisher =
+        this->create_publisher<std_msgs::msg::String>("/elevator_down", 10);
+    param_client_1 = this->create_client<rcl_interfaces::srv::SetParameters>(
+        "/global_costmap/global_costmap/set_parameters");
+    param_client_2 = this->create_client<rcl_interfaces::srv::SetParameters>(
+        "/local_costmap/local_costmap/set_parameters");
     controller_ = this->create_wall_timer(
         100ms, std::bind(&NavigateToPoseClient::control_callback, this));
 
@@ -151,6 +160,44 @@ private:
       break;
     }
 
+    case Command::DeliverGoal: {
+      // Setting options
+      search_ = false;
+      control_ = true;
+      srv_wait_ = true;
+      round_ = 3;
+
+      // Finding closest end
+      RCLCPP_INFO(this->get_logger(), "Finding closest direction to home");
+      waypoints = {2.27, -2.04, 0.92, -2.09, 0.04, 0.06};
+      next_waypoint(end_index, goal_index);
+      std::pair<double, double> point_1 = {waypoints[goal_index],
+                                           waypoints[goal_index + 1]};
+      int goal_1 = goal_index;
+
+      waypoints = {5.46, -0.03, 4.39, 0.11, 2.49, 0.10, 0.68, 0.04, 0.04, 0.06};
+      next_waypoint(end_index, goal_index);
+      std::pair<double, double> point_2 = {waypoints[goal_index],
+                                           waypoints[goal_index + 1]};
+
+      double dist_to_point_1 =
+          std::hypot(point_1.first - current_x, point_1.second - current_y);
+
+      double dist_to_point_2 =
+          std::hypot(point_2.first - current_x, point_2.second - current_y);
+
+      if (dist_to_point_1 < dist_to_point_2) {
+        waypoints = {2.27, -2.04, 0.92, -2.09, 0.04, 0.06};
+        end_index = waypoints.size() - 2;
+        goal_index = goal_1;
+      }
+
+      cmd = Command::Rotate;
+      RCLCPP_INFO(this->get_logger(), "Starting rotation");
+
+      break;
+    }
+
     case Command::Rotate: {
       // Checking for ongoing goal
       if (nav_wait_ == true && !success_ && !aborted_) {
@@ -226,6 +273,7 @@ private:
           cmd = Command::None;
         } else {
           cmd = (round_ == 3) ? Command::None : Command::Lower;
+          start_time = this->get_clock()->now();
         }
       }
 
@@ -246,6 +294,7 @@ private:
     case Command::Attach: {
       // Attach, resize footprint and go to deliver <-----------///////
       if (!srv_wait_) {
+        // Starting attachement
         auto request = std::make_shared<GoToLoading::Request>();
         request->attach_to_shelf = 10;
 
@@ -258,12 +307,29 @@ private:
     }
 
     case Command::Lower: {
-      // Start lowering <-----------///////
+      end_time = this->get_clock()->now();
+      auto elevator_msg = std_msgs::msg::String();
+      elevator_publisher->publish(elevator_msg);
+      if ((end_time - start_time).seconds() > 5) {
+        x1 = current_x;
+        y1 = current_y;
+        control_ = true;
+        xx = -0.1;
+        cmd = Command::Backup;
+      }
       break;
     }
 
     case Command::Backup: {
-      // backup and go to home <-----------///////
+      error_distance =
+          std::sqrt(std::pow(x1 - current_x, 2) + std::pow(y1 - current_y, 2));
+      if (error_distance < 0.5) {
+        xx = -0.1;
+        zz = 0.0;
+      } else {
+        cmd = Command::HomeGoal;
+        xx = zz = 0.0;
+      }
       break;
     }
 
@@ -273,6 +339,7 @@ private:
 
     if (control_) {
       geometry_msgs::msg::Twist cmd_msg;
+      cmd_msg.linear.x = xx;
       cmd_msg.angular.z = zz;
       cmd_vel_publisher->publish(cmd_msg);
       if (cmd == Command::None) {
@@ -393,6 +460,27 @@ private:
     }
   }
 
+  void resize_function(double size) {
+    // Resizing
+    auto request_1 =
+        std::make_shared<rcl_interfaces::srv::SetParameters::Request>();
+    request->parameters.push_back(
+        rclcpp::Parameter("robot_radius", size).to_parameter_msg());
+
+    auto result_future_1 = param_client_1->async_send_request(
+        request_1, std::bind(&NavigateToPoseClient::resize_response_1, this,
+                             std::placeholders::_1));
+
+    auto request_2 =
+        std::make_shared<rcl_interfaces::srv::SetParameters::Request>();
+    request->parameters.push_back(
+        rclcpp::Parameter("robot_radius", size).to_parameter_msg());
+
+    auto result_future_2 = param_client_2->async_send_request(
+        request_2, std::bind(&NavigateToPoseClient::resize_response_2, this,
+                             std::placeholders::_1));
+  }
+
   void srv_clbk(rclcpp::Client<GoToLoading>::SharedFuture future) {
     auto status = future.wait_for(1s);
 
@@ -419,7 +507,48 @@ private:
         RCLCPP_INFO(this->get_logger(), "Search result: %d",
                     response->complete);
         shelf_ = response->complete;
-        cmd = Command::None;
+        resize_function(0.3);
+        cmd = Command::DeliverGoal;
+      }
+    } else {
+      RCLCPP_INFO(this->get_logger(), "Service In-Progress...");
+    }
+  }
+
+  void resize_response_1(
+      rclcpp::Client<rcl_interfaces::srv::SetParameters>::SharedFuture future) {
+    auto status = future.wait_for(std::chrono::seconds(1));
+
+    if (status == std::future_status::ready) {
+      auto response = future.get();
+      for (const auto &result : response->results) {
+        if (result.successful) {
+          RCLCPP_INFO(this->get_logger(),
+                      "global map parameter set successfully.");
+        } else {
+          RCLCPP_WARN(this->get_logger(), "Failed to set parameter: %s",
+                      result.reason.c_str());
+        }
+      }
+    } else {
+      RCLCPP_INFO(this->get_logger(), "Service In-Progress...");
+    }
+  }
+
+  void resize_response_2(
+      rclcpp::Client<rcl_interfaces::srv::SetParameters>::SharedFuture future) {
+    auto status = future.wait_for(std::chrono::seconds(1));
+
+    if (status == std::future_status::ready) {
+      auto response = future.get();
+      for (const auto &result : response->results) {
+        if (result.successful) {
+          RCLCPP_INFO(this->get_logger(),
+                      "Local map parameter set successfully.");
+        } else {
+          RCLCPP_WARN(this->get_logger(), "Failed to set parameter: %s",
+                      result.reason.c_str());
+        }
       }
     } else {
       RCLCPP_INFO(this->get_logger(), "Service In-Progress...");
@@ -431,7 +560,10 @@ private:
   rclcpp::Subscription<std_msgs::msg::Int32>::SharedPtr command_sub;
   rclcpp::Subscription<nav_msgs::msg::Odometry>::SharedPtr odom_sub;
   rclcpp::Publisher<geometry_msgs::msg::Twist>::SharedPtr cmd_vel_publisher;
+  rclcpp::Publisher<std_msgs::msg::String>::SharedPtr elevator_publisher;
   rclcpp::TimerBase::SharedPtr controller_;
+  rclcpp::Client<rcl_interfaces::srv::SetParameters>::SharedPtr param_client_1;
+  rclcpp::Client<rcl_interfaces::srv::SetParameters>::SharedPtr param_client_2;
 
   enum class Command {
     None,
@@ -447,8 +579,9 @@ private:
   Command cmd;
 
   std::vector<double> waypoints;
+  rclcpp::Time start_time, end_time;
   double current_x, current_y, current_z, current_w, yaw_;
-  double yaw_error, zz;
+  double yaw_error, error_distance, xx, zz, x1, y1;
   int command_, end_index, goal_index, round_;
   bool home_, control_, aborted_, success_, nav_wait_, search_, srv_wait_,
       shelf_;

@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.8)
-project(nav2_apps)
+project(shelf_detector)
 
 if(CMAKE_COMPILER_IS_GNUCXX OR CMAKE_CXX_COMPILER_ID MATCHES "Clang")
   add_compile_options(-Wall -Wextra -Wpedantic)
@@ -17,6 +17,7 @@ find_package(tf2 REQUIRED)
 find_package(rclcpp_action REQUIRED)
 find_package(nav2_msgs REQUIRED)
 find_package(std_msgs REQUIRED)
+find_package(rcl_interfaces REQUIRED)
 find_package(rosidl_default_generators REQUIRED)
 
 
@@ -30,11 +31,11 @@ rosidl_generate_interfaces(${PROJECT_NAME}
   DEPENDENCIES
 )
 
-add_executable(action_client src/action_client.cpp)
+add_executable(shelf_client src/shelf_client.cpp)
 
-add_executable(transform_node src/transform_node.cpp)
+add_executable(attach_service src/attach_service.cpp)
 
-ament_target_dependencies(transform_node
+ament_target_dependencies(attach_service
   rclcpp
   geometry_msgs
   nav_msgs
@@ -43,9 +44,10 @@ ament_target_dependencies(transform_node
   tf2
 )
 
-ament_target_dependencies(action_client
+ament_target_dependencies(shelf_client
   rclcpp
   rclcpp_action
+  rcl_interfaces
   nav2_msgs
   tf2
   nav_msgs
@@ -55,10 +57,10 @@ ament_target_dependencies(action_client
 
 ament_export_dependencies(rosidl_default_runtime)
 
-rosidl_target_interfaces(transform_node
+rosidl_target_interfaces(attach_service
   ${PROJECT_NAME} "rosidl_typesupport_cpp")
 
-rosidl_target_interfaces(action_client
+rosidl_target_interfaces(shelf_client
   ${PROJECT_NAME} "rosidl_typesupport_cpp")
 
 if(BUILD_TESTING)
@@ -79,8 +81,8 @@ install(DIRECTORY
 )
 
 install(TARGETS
-  transform_node
-  action_client
+  attach_service
+  shelf_client
   DESTINATION lib/${PROJECT_NAME})
 
 ament_package()

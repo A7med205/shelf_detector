@@ -71,7 +71,7 @@ def generate_launch_description():
             executable='static_transform_publisher',
             name='static_transform_publisher_map_to_odom',
             output='log',
-            arguments=['0', '0', '0', '0', '0', '0', 'map', 'odom']  # Adjust the arguments as needed
+            arguments=['0', '0', '0', '0', '0', '0', 'map', 'odom']
         ),
 
         Node(
