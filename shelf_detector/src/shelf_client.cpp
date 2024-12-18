@@ -98,6 +98,8 @@ private:
     case Command::SearchGoal: {
       // Setting optotions
       search_ = true;
+      home_ = false;
+      deliver_ = false;
       control_ = true;
       srv_wait_ = false;
       round_ = 1;
@@ -106,8 +108,7 @@ private:
       waypoints = {2.27, -2.04, 0.92, -2.09, 0.68, 0.04,
                    2.49, 0.10,  4.39, 0.11,  5.46, -0.03};
       // waypoints = {-0.02, -2.01, -0.01, -0.04, 1.09,
-      // 0.01, 2.45, -0.01, 3.56, -0.21
-      //};
+      //              0.01,  2.45,  -0.01, 3.56,  -0.21};
       RCLCPP_INFO(this->get_logger(), "Finding closest end");
       next_waypoint(end_index, goal_index);
 
@@ -120,15 +121,17 @@ private:
     // Return to home mode
     case Command::HomeGoal: {
       // Setting options
+      home_ = true;
       search_ = false;
+      deliver_ = false;
       control_ = true;
       srv_wait_ = true;
       round_ = 2;
 
       // Finding closest end
       RCLCPP_INFO(this->get_logger(), "Finding closest direction to home");
-      waypoints = {2.27, -2.04, 0.92, -2.09, 0.04, 0.06};
-      // waypoints = {-0.02, -2.01, -0.01, -0.04, -0.58, 0.06};
+      // waypoints = {2.27, -2.04, 0.92, -2.09, 0.04, 0.06};
+      waypoints = {-0.02, -2.01, -0.01, -0.04, -0.58, 0.06};
       next_waypoint(end_index, goal_index);
       std::pair<double, double> point_1 = {waypoints[goal_index],
                                            waypoints[goal_index + 1]};
@@ -136,7 +139,7 @@ private:
 
       waypoints = {5.46, -0.03, 4.39, 0.11, 2.49, 0.10, 0.68, 0.04, 0.04, 0.06};
       // waypoints = {3.56, -0.21, 2.45,  0.00,  1.09,
-      // 0.01, -0.01, -0.04, -0.58, 0.06};
+      //             0.01, -0.01, -0.04, -0.58, 0.06};
       next_waypoint(end_index, goal_index);
       std::pair<double, double> point_2 = {waypoints[goal_index],
                                            waypoints[goal_index + 1]};
@@ -162,22 +165,23 @@ private:
 
     case Command::DeliverGoal: {
       // Setting options
+      deliver_ = true;
       search_ = false;
       control_ = true;
       srv_wait_ = true;
-      round_ = 3;
+      round_ = 2;
 
       // Finding closest end
       RCLCPP_INFO(this->get_logger(), "Finding direction to delivery target");
-      waypoints = {0.92, -2.09, 0.68, 0.038, 2.50, 0.90};
-      // waypoints = {-0.01, -0.04, 1.15, 0.95};
+      waypoints = {0.92, -2.09, 0.68, 0.038, 2.54, 0.26};
+      // waypoints = {-0.01, -0.04, 1.24, 0.47};
       next_waypoint(end_index, goal_index);
       std::pair<double, double> point_1 = {waypoints[goal_index],
                                            waypoints[goal_index + 1]};
       int goal_1 = goal_index;
 
-      waypoints = {4.39, 0.11, 2.50, 0.90};
-      // waypoints = {2.45, -0.01, 1.15, 0.95};
+      waypoints = {4.39, 0.11, 2.54, 0.26};
+      // waypoints = {2.45, -0.01, 1.24, 0.47};
       next_waypoint(end_index, goal_index);
       std::pair<double, double> point_2 = {waypoints[goal_index],
                                            waypoints[goal_index + 1]};
@@ -189,7 +193,8 @@ private:
           std::hypot(point_2.first - current_x, point_2.second - current_y);
 
       if (dist_to_point_1 < dist_to_point_2) {
-        waypoints = {0.92, -2.09, 0.68, 0.038, 2.50, 0.90};
+        waypoints = {0.92, -2.09, 0.68, 0.038, 2.54, 0.26};
+        // waypoints = {-0.01, -0.04, 1.24, 0.47};
         end_index = waypoints.size() - 2;
         goal_index = goal_1;
       }
@@ -213,8 +218,8 @@ private:
 
       yaw_error = angle_to_waypoint - yaw_;
       if (std::abs(yaw_error) > 0.1) {
-        zz = (yaw_error > 0) ? std::max(0.5 * yaw_error, 0.2)
-                             : std::min(0.5 * yaw_error, -0.2);
+        zz = (yaw_error > 0) ? std::max(0.5 * yaw_error, 0.5)
+                             : std::min(0.5 * yaw_error, -0.5);
       } else {
         zz = 0.0;
         control_ = false;
@@ -270,17 +275,17 @@ private:
         round_ += 1;
       }
 
-      if (round_ == 3) {
+      if (round_ > 2) {
         if (search_) {
           RCLCPP_INFO(this->get_logger(), "Shelf wasn't found");
-          cmd = Command::HomeGoal;
-        } else {
           cmd = Command::None;
+        } else if (home_) {
+          cmd = Command::None;
+        } else if (deliver_) {
+          x1 = current_x;
+          y1 = current_y;
+          cmd = Command::Forward;
         }
-      } else if (round_ == 4) {
-        x1 = current_x;
-        y1 = current_y;
-        Command::Forward;
       }
 
       // Trying to detect shelf
@@ -315,7 +320,7 @@ private:
     case Command::Forward: {
       error_distance =
           std::sqrt(std::pow(x1 - current_x, 2) + std::pow(y1 - current_y, 2));
-      if (error_distance < 0.3) {
+      if (error_distance < 0.8) {
         xx = 0.1;
       } else {
         xx = 0.0;
@@ -333,6 +338,7 @@ private:
         x1 = current_x;
         y1 = current_y;
         control_ = true;
+        resize_function(0.25);
         cmd = Command::Backup;
       }
       break;
@@ -345,7 +351,7 @@ private:
         xx = -0.1;
         zz = 0.0;
       } else {
-        cmd = Command::HomeGoal;
+        cmd = Command::None;
         xx = zz = 0.0;
       }
       break;
@@ -433,6 +439,15 @@ private:
     goal_msg.pose.pose.position.y = y;
     goal_msg.pose.pose.orientation.z = current_z;
     goal_msg.pose.pose.orientation.w = current_w;
+    if (x == 1.24 && y == 0.47) {
+      goal_msg.pose.pose.orientation.z = 0.73;
+      goal_msg.pose.pose.orientation.w = 0.68;
+    }
+
+    if (x == 2.54 && y == 0.26) {
+      goal_msg.pose.pose.orientation.z = 0.707;
+      goal_msg.pose.pose.orientation.w = 0.707;
+    }
 
     RCLCPP_INFO(this->get_logger(), "Sending goal");
 
@@ -489,14 +504,14 @@ private:
         request_1, std::bind(&NavigateToPoseClient::resize_response_1, this,
                              std::placeholders::_1));
 
-    auto request_2 =
+    /*auto request_2 =
         std::make_shared<rcl_interfaces::srv::SetParameters::Request>();
     request_2->parameters.push_back(
         rclcpp::Parameter("robot_radius", size).to_parameter_msg());
 
     auto result_future_2 = param_client_2->async_send_request(
         request_2, std::bind(&NavigateToPoseClient::resize_response_2, this,
-                             std::placeholders::_1));
+                             std::placeholders::_1));*/
   }
 
   void srv_clbk(rclcpp::Client<GoToLoading>::SharedFuture future) {
@@ -524,7 +539,7 @@ private:
       if (response->complete) {
         RCLCPP_INFO(this->get_logger(), "Attachment result: %d",
                     response->complete);
-        resize_function(0.3);
+        resize_function(0.28);
         cmd = Command::DeliverGoal;
       }
     } else {
@@ -552,7 +567,7 @@ private:
     }
   }
 
-  void resize_response_2(
+  /*void resize_response_2(
       rclcpp::Client<rcl_interfaces::srv::SetParameters>::SharedFuture future) {
     auto status = future.wait_for(std::chrono::seconds(1));
 
@@ -570,7 +585,7 @@ private:
     } else {
       RCLCPP_INFO(this->get_logger(), "Service In-Progress...");
     }
-  }
+  }*/
 
   rclcpp_action::Client<NavigateToPoseMsg>::SharedPtr act_client_;
   rclcpp::Client<GoToLoading>::SharedPtr srv_client_;
@@ -601,8 +616,8 @@ private:
   double current_x, current_y, current_z, current_w, yaw_;
   double yaw_error, error_distance, xx, zz, x1, y1;
   int command_, end_index, goal_index, round_;
-  bool home_, control_, aborted_, success_, nav_wait_, search_, srv_wait_,
-      shelf_;
+  bool search_, home_, deliver_, control_, aborted_, success_, nav_wait_,
+      srv_wait_, shelf_;
 };
 
 int main(int argc, char **argv) {
