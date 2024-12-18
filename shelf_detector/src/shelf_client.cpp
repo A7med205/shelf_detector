@@ -38,8 +38,8 @@ public:
         std::bind(&NavigateToPoseClient::odom_callback, this,
                   std::placeholders::_1));
 
-    cmd_vel_publisher =
-        this->create_publisher<geometry_msgs::msg::Twist>("/cmd_vel", 10);
+    cmd_vel_publisher = this->create_publisher<geometry_msgs::msg::Twist>(
+        "/diffbot_base_controller/cmd_vel_unstamped", 10);
     elevator_publisher =
         this->create_publisher<std_msgs::msg::String>("/elevator_down", 10);
     param_client_1 = this->create_client<rcl_interfaces::srv::SetParameters>(
@@ -103,10 +103,11 @@ private:
       round_ = 1;
 
       // Finding closest end
-      // waypoints = {2.27, -2.04, 0.92, -2.09, 0.68, 0.04,
-      //             2.49, 0.10,  4.39, 0.11,  5.46, -0.03};
-      waypoints = {-0.02, -2.01, -0.01, -0.04, 1.09,
-                   0.01,  2.45,  0.00,  3.56,  -0.21};
+      waypoints = {2.27, -2.04, 0.92, -2.09, 0.68, 0.04,
+                   2.49, 0.10,  4.39, 0.11,  5.46, -0.03};
+      // waypoints = {-0.02, -2.01, -0.01, -0.04, 1.09,
+      // 0.01, 2.45, -0.01, 3.56, -0.21
+      //};
       RCLCPP_INFO(this->get_logger(), "Finding closest end");
       next_waypoint(end_index, goal_index);
 
@@ -126,17 +127,16 @@ private:
 
       // Finding closest end
       RCLCPP_INFO(this->get_logger(), "Finding closest direction to home");
-      // waypoints = {2.27, -2.04, 0.92, -2.09, 0.04, 0.06};
-      waypoints = {-0.02, -2.01, -0.01, -0.04, -0.58, 0.06};
+      waypoints = {2.27, -2.04, 0.92, -2.09, 0.04, 0.06};
+      // waypoints = {-0.02, -2.01, -0.01, -0.04, -0.58, 0.06};
       next_waypoint(end_index, goal_index);
       std::pair<double, double> point_1 = {waypoints[goal_index],
                                            waypoints[goal_index + 1]};
       int goal_1 = goal_index;
 
-      // waypoints = {5.46, -0.03, 4.39, 0.11, 2.49, 0.10, 0.68, 0.04, 0.04,
-      // 0.06};
-      waypoints = {3.56, -0.21, 2.45,  0.00,  1.09,
-                   0.01, -0.01, -0.04, -0.58, 0.06};
+      waypoints = {5.46, -0.03, 4.39, 0.11, 2.49, 0.10, 0.68, 0.04, 0.04, 0.06};
+      // waypoints = {3.56, -0.21, 2.45,  0.00,  1.09,
+      // 0.01, -0.01, -0.04, -0.58, 0.06};
       next_waypoint(end_index, goal_index);
       std::pair<double, double> point_2 = {waypoints[goal_index],
                                            waypoints[goal_index + 1]};
@@ -148,8 +148,8 @@ private:
           std::hypot(point_2.first - current_x, point_2.second - current_y);
 
       if (dist_to_point_1 < dist_to_point_2) {
-        // waypoints = {2.27, -2.04, 0.92, -2.09, 0.04, 0.06};
-        waypoints = {-0.02, -2.01, -0.01, -0.04, -0.58, 0.06};
+        waypoints = {2.27, -2.04, 0.92, -2.09, 0.04, 0.06};
+        // waypoints = {-0.02, -2.01, -0.01, -0.04, -0.58, 0.06};
         end_index = waypoints.size() - 2;
         goal_index = goal_1;
       }
@@ -168,14 +168,16 @@ private:
       round_ = 3;
 
       // Finding closest end
-      RCLCPP_INFO(this->get_logger(), "Finding closest direction to home");
-      waypoints = {2.27, -2.04, 0.92, -2.09, 0.04, 0.06};
+      RCLCPP_INFO(this->get_logger(), "Finding direction to delivery target");
+      waypoints = {0.92, -2.09, 0.68, 0.038, 2.50, 0.90};
+      // waypoints = {-0.01, -0.04, 1.15, 0.95};
       next_waypoint(end_index, goal_index);
       std::pair<double, double> point_1 = {waypoints[goal_index],
                                            waypoints[goal_index + 1]};
       int goal_1 = goal_index;
 
-      waypoints = {5.46, -0.03, 4.39, 0.11, 2.49, 0.10, 0.68, 0.04, 0.04, 0.06};
+      waypoints = {4.39, 0.11, 2.50, 0.90};
+      // waypoints = {2.45, -0.01, 1.15, 0.95};
       next_waypoint(end_index, goal_index);
       std::pair<double, double> point_2 = {waypoints[goal_index],
                                            waypoints[goal_index + 1]};
@@ -187,7 +189,7 @@ private:
           std::hypot(point_2.first - current_x, point_2.second - current_y);
 
       if (dist_to_point_1 < dist_to_point_2) {
-        waypoints = {2.27, -2.04, 0.92, -2.09, 0.04, 0.06};
+        waypoints = {0.92, -2.09, 0.68, 0.038, 2.50, 0.90};
         end_index = waypoints.size() - 2;
         goal_index = goal_1;
       }
@@ -267,14 +269,18 @@ private:
         cmd = Command::Rotate;
         round_ += 1;
       }
-      if (round_ > 2) {
+
+      if (round_ == 3) {
         if (search_) {
           RCLCPP_INFO(this->get_logger(), "Shelf wasn't found");
-          cmd = Command::None;
+          cmd = Command::HomeGoal;
         } else {
-          cmd = (round_ == 3) ? Command::None : Command::Lower;
-          start_time = this->get_clock()->now();
+          cmd = Command::None;
         }
+      } else if (round_ == 4) {
+        x1 = current_x;
+        y1 = current_y;
+        Command::Forward;
       }
 
       // Trying to detect shelf
@@ -305,6 +311,19 @@ private:
       }
       break;
     }
+      //
+    case Command::Forward: {
+      error_distance =
+          std::sqrt(std::pow(x1 - current_x, 2) + std::pow(y1 - current_y, 2));
+      if (error_distance < 0.3) {
+        xx = 0.1;
+      } else {
+        xx = 0.0;
+        start_time = this->get_clock()->now();
+        cmd = Command::Lower;
+      }
+      break;
+    }
 
     case Command::Lower: {
       end_time = this->get_clock()->now();
@@ -314,7 +333,6 @@ private:
         x1 = current_x;
         y1 = current_y;
         control_ = true;
-        xx = -0.1;
         cmd = Command::Backup;
       }
       break;
@@ -464,7 +482,7 @@ private:
     // Resizing
     auto request_1 =
         std::make_shared<rcl_interfaces::srv::SetParameters::Request>();
-    request->parameters.push_back(
+    request_1->parameters.push_back(
         rclcpp::Parameter("robot_radius", size).to_parameter_msg());
 
     auto result_future_1 = param_client_1->async_send_request(
@@ -473,7 +491,7 @@ private:
 
     auto request_2 =
         std::make_shared<rcl_interfaces::srv::SetParameters::Request>();
-    request->parameters.push_back(
+    request_2->parameters.push_back(
         rclcpp::Parameter("robot_radius", size).to_parameter_msg());
 
     auto result_future_2 = param_client_2->async_send_request(
@@ -489,7 +507,7 @@ private:
       if (response->complete) {
         RCLCPP_INFO(this->get_logger(), "Search result: %d",
                     response->complete);
-        shelf_ = response->complete;
+        send_goal(1000, 1000);
         cmd = Command::Attach;
       }
       srv_wait_ = false;
@@ -504,9 +522,8 @@ private:
     if (status == std::future_status::ready) {
       auto response = future.get();
       if (response->complete) {
-        RCLCPP_INFO(this->get_logger(), "Search result: %d",
+        RCLCPP_INFO(this->get_logger(), "Attachment result: %d",
                     response->complete);
-        shelf_ = response->complete;
         resize_function(0.3);
         cmd = Command::DeliverGoal;
       }
@@ -573,6 +590,7 @@ private:
     Rotate,
     SendGoals,
     Attach,
+    Forward,
     Lower,
     Backup
   };

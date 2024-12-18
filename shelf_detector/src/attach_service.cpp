@@ -46,7 +46,7 @@ public:
       vel_topic = "/cmd_vel";
       laser_link = 0.24;
       dock_dis = 0.65;
-      leg_min = 0.4;
+      leg_min = 0.55;
       leg_max = 0.72;
     }
 
