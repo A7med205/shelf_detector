@@ -49,8 +49,6 @@ public:
             "/initialpose", 10);
     param_client_1 = this->create_client<rcl_interfaces::srv::SetParameters>(
         "/global_costmap/global_costmap/set_parameters");
-    param_client_2 = this->create_client<rcl_interfaces::srv::SetParameters>(
-        "/local_costmap/local_costmap/set_parameters");
     controller_ = this->create_wall_timer(
         100ms, std::bind(&NavigateToPoseClient::control_callback, this));
 
