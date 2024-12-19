@@ -1,3 +1,4 @@
+#include "geometry_msgs/msg/pose_with_covariance_stamped.hpp"
 #include "geometry_msgs/msg/twist.hpp"
 #include "nav2_msgs/action/navigate_to_pose.hpp"
 #include "nav_msgs/msg/odometry.hpp"
@@ -10,6 +11,7 @@
 #include <shelf_detector/srv/go_to_loading.hpp>
 #include <std_msgs/msg/int32.hpp>
 #include <std_msgs/msg/string.hpp>
+#include <string>
 #include <tf2/LinearMath/Matrix3x3.h>
 #include <tf2/LinearMath/Quaternion.h>
 
@@ -38,10 +40,13 @@ public:
         std::bind(&NavigateToPoseClient::odom_callback, this,
                   std::placeholders::_1));
 
-    cmd_vel_publisher = this->create_publisher<geometry_msgs::msg::Twist>(
-        "/diffbot_base_controller/cmd_vel_unstamped", 10);
+    cmd_vel_publisher =
+        this->create_publisher<geometry_msgs::msg::Twist>("/cmd_vel", 10);
     elevator_publisher =
         this->create_publisher<std_msgs::msg::String>("/elevator_down", 10);
+    pose_publisher_ =
+        this->create_publisher<geometry_msgs::msg::PoseWithCovarianceStamped>(
+            "/initialpose", 10);
     param_client_1 = this->create_client<rcl_interfaces::srv::SetParameters>(
         "/global_costmap/global_costmap/set_parameters");
     param_client_2 = this->create_client<rcl_interfaces::srv::SetParameters>(
@@ -51,6 +56,31 @@ public:
 
     round_ = 1;
     cmd = Command::None;
+
+    // parameters
+    auto param_desc = rcl_interfaces::msg::ParameterDescriptor{};
+    param_desc.description = "Sets the sim/real mode";
+    this->declare_parameter<int>("mode", 0, param_desc);
+    this->get_parameter("mode", mode_param);
+
+    if (mode_param == 0) {
+      M = {2.27, -2.04, 0.92, -2.09, 0.68, 0.04,
+           2.49, 0.10,  4.39, 0.11,  5.46, -0.03};
+      H1 = {2.27, -2.04, 0.92, -2.09, 0.04, 0.06};
+      H2 = {5.46, -0.03, 4.39, 0.11, 2.49, 0.10, 0.68, 0.04, 0.04, 0.06};
+      D1 = {0.92, -2.09, 0.68, 0.038, 2.54, 0.26};
+      D2 = {4.39, 0.11, 2.54, 0.26};
+      vel_topic = "/diffbot_base_controller/cmd_vel_unstamped";
+    } else {
+      M = {-0.02, -2.01, -0.01, -0.04, 1.09, 0.01, 2.45, -0.01, 3.56, -0.21};
+      H1 = {-0.02, -2.01, -0.01, -0.04, -0.58, 0.06};
+      H2 = {3.56, -0.21, 2.45, 0.00, 1.09, 0.01, -0.01, -0.04, -0.58, 0.06};
+      D1 = {-0.01, -0.04, 1.11, 0.17};
+      D2 = {2.45, -0.01, 1.11, 0.17};
+      vel_topic = "/cmd_vel";
+    }
+    cmd_vel_publisher =
+        this->create_publisher<geometry_msgs::msg::Twist>("/cmd_vel", 10);
 
     // Waiting for the /navigate_to_pose action server
     while (!act_client_->wait_for_action_server(1s)) {
@@ -76,6 +106,32 @@ private:
     double roll, pitch, yaw;
     m.getRPY(roll, pitch, yaw);
     yaw_ = yaw;
+
+    if (!initial_) {
+      pub_initial();
+    }
+  }
+
+  void pub_initial() {
+    // Create a PoseWithCovarianceStamped message
+    auto message = geometry_msgs::msg::PoseWithCovarianceStamped();
+
+    // Set the header and pose
+    message.header.frame_id = "map";
+    message.header.stamp = this->get_clock()->now();
+
+    message.pose.pose.position.x = current_x;
+    message.pose.pose.position.y = current_y;
+    message.pose.pose.position.z = 0.0;
+
+    message.pose.pose.orientation.x = 0.0;
+    message.pose.pose.orientation.y = 0.0;
+    message.pose.pose.orientation.z = current_z;
+    message.pose.pose.orientation.w = current_w;
+
+    // Publishing the message
+    pose_publisher_->publish(message);
+    initial_ = true;
   }
 
   // ros2 topic pub -1 /command_topic std_msgs/Int32 "{data: 1}"
@@ -105,10 +161,10 @@ private:
       round_ = 1;
 
       // Finding closest end
-      waypoints = {2.27, -2.04, 0.92, -2.09, 0.68, 0.04,
-                   2.49, 0.10,  4.39, 0.11,  5.46, -0.03};
-      // waypoints = {-0.02, -2.01, -0.01, -0.04, 1.09,
-      //              0.01,  2.45,  -0.01, 3.56,  -0.21};
+      // waypoints = {2.27, -2.04, 0.92, -2.09, 0.68, 0.04,
+      //           2.49, 0.10,  4.39, 0.11,  5.46, -0.03};
+      waypoints = {-0.02, -2.01, -0.01, -0.04, 1.09,
+                   0.01,  2.45,  -0.01, 3.56,  -0.21};
       RCLCPP_INFO(this->get_logger(), "Finding closest end");
       next_waypoint(end_index, goal_index);
 
@@ -137,9 +193,10 @@ private:
                                            waypoints[goal_index + 1]};
       int goal_1 = goal_index;
 
-      waypoints = {5.46, -0.03, 4.39, 0.11, 2.49, 0.10, 0.68, 0.04, 0.04, 0.06};
-      // waypoints = {3.56, -0.21, 2.45,  0.00,  1.09,
-      //             0.01, -0.01, -0.04, -0.58, 0.06};
+      // waypoints = {5.46, -0.03, 4.39, 0.11, 2.49, 0.10, 0.68, 0.04, 0.04,
+      // 0.06};
+      waypoints = {3.56, -0.21, 2.45,  0.00,  1.09,
+                   0.01, -0.01, -0.04, -0.58, 0.06};
       next_waypoint(end_index, goal_index);
       std::pair<double, double> point_2 = {waypoints[goal_index],
                                            waypoints[goal_index + 1]};
@@ -151,8 +208,8 @@ private:
           std::hypot(point_2.first - current_x, point_2.second - current_y);
 
       if (dist_to_point_1 < dist_to_point_2) {
-        waypoints = {2.27, -2.04, 0.92, -2.09, 0.04, 0.06};
-        // waypoints = {-0.02, -2.01, -0.01, -0.04, -0.58, 0.06};
+        // waypoints = {2.27, -2.04, 0.92, -2.09, 0.04, 0.06};
+        waypoints = {-0.02, -2.01, -0.01, -0.04, -0.58, 0.06};
         end_index = waypoints.size() - 2;
         goal_index = goal_1;
       }
@@ -173,15 +230,15 @@ private:
 
       // Finding closest end
       RCLCPP_INFO(this->get_logger(), "Finding direction to delivery target");
-      waypoints = {0.92, -2.09, 0.68, 0.038, 2.54, 0.26};
-      // waypoints = {-0.01, -0.04, 1.24, 0.47};
+      // waypoints = {0.92, -2.09, 0.68, 0.038, 2.54, 0.26};
+      waypoints = {-0.01, -0.04, 1.11, 0.17};
       next_waypoint(end_index, goal_index);
       std::pair<double, double> point_1 = {waypoints[goal_index],
                                            waypoints[goal_index + 1]};
       int goal_1 = goal_index;
 
-      waypoints = {4.39, 0.11, 2.54, 0.26};
-      // waypoints = {2.45, -0.01, 1.24, 0.47};
+      // waypoints = {4.39, 0.11, 2.54, 0.26};
+      waypoints = {2.45, -0.01, 1.11, 0.17};
       next_waypoint(end_index, goal_index);
       std::pair<double, double> point_2 = {waypoints[goal_index],
                                            waypoints[goal_index + 1]};
@@ -193,8 +250,8 @@ private:
           std::hypot(point_2.first - current_x, point_2.second - current_y);
 
       if (dist_to_point_1 < dist_to_point_2) {
-        waypoints = {0.92, -2.09, 0.68, 0.038, 2.54, 0.26};
-        // waypoints = {-0.01, -0.04, 1.24, 0.47};
+        // waypoints = {0.92, -2.09, 0.68, 0.038, 2.54, 0.26};
+        waypoints = {-0.01, -0.04, 1.11, 0.17};
         end_index = waypoints.size() - 2;
         goal_index = goal_1;
       }
@@ -215,9 +272,9 @@ private:
       double angle_to_waypoint =
           std::atan2(waypoints[goal_index + 1] - current_y,
                      waypoints[goal_index] - current_x);
-
+      yaw_ = (yaw_ > 0) ? yaw_ - M_PI : yaw_ + M_PI;
       yaw_error = angle_to_waypoint - yaw_;
-      if (std::abs(yaw_error) > 0.1) {
+      if (std::abs(yaw_error) > 0.1 && !deliver_) {
         zz = (yaw_error > 0) ? std::max(0.5 * yaw_error, 0.5)
                              : std::min(0.5 * yaw_error, -0.5);
       } else {
@@ -347,7 +404,7 @@ private:
     case Command::Backup: {
       error_distance =
           std::sqrt(std::pow(x1 - current_x, 2) + std::pow(y1 - current_y, 2));
-      if (error_distance < 0.5) {
+      if (error_distance < 1.0) {
         xx = -0.1;
         zz = 0.0;
       } else {
@@ -439,9 +496,9 @@ private:
     goal_msg.pose.pose.position.y = y;
     goal_msg.pose.pose.orientation.z = current_z;
     goal_msg.pose.pose.orientation.w = current_w;
-    if (x == 1.24 && y == 0.47) {
-      goal_msg.pose.pose.orientation.z = 0.73;
-      goal_msg.pose.pose.orientation.w = 0.68;
+    if (x == 1.11 && y == 0.17) {
+      goal_msg.pose.pose.orientation.z = 0.70;
+      goal_msg.pose.pose.orientation.w = 0.70;
     }
 
     if (x == 2.54 && y == 0.26) {
@@ -593,6 +650,8 @@ private:
   rclcpp::Subscription<nav_msgs::msg::Odometry>::SharedPtr odom_sub;
   rclcpp::Publisher<geometry_msgs::msg::Twist>::SharedPtr cmd_vel_publisher;
   rclcpp::Publisher<std_msgs::msg::String>::SharedPtr elevator_publisher;
+  rclcpp::Publisher<geometry_msgs::msg::PoseWithCovarianceStamped>::SharedPtr
+      pose_publisher_;
   rclcpp::TimerBase::SharedPtr controller_;
   rclcpp::Client<rcl_interfaces::srv::SetParameters>::SharedPtr param_client_1;
   rclcpp::Client<rcl_interfaces::srv::SetParameters>::SharedPtr param_client_2;
@@ -611,13 +670,14 @@ private:
   };
   Command cmd;
 
-  std::vector<double> waypoints;
+  std::vector<double> waypoints, M, H1, H2, D1, D2;
   rclcpp::Time start_time, end_time;
+  std::string vel_topic;
   double current_x, current_y, current_z, current_w, yaw_;
   double yaw_error, error_distance, xx, zz, x1, y1;
-  int command_, end_index, goal_index, round_;
+  int command_, end_index, goal_index, round_, mode_param;
   bool search_, home_, deliver_, control_, aborted_, success_, nav_wait_,
-      srv_wait_, shelf_;
+      srv_wait_, shelf_, initial_;
 };
 
 int main(int argc, char **argv) {

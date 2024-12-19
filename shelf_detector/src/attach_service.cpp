@@ -47,7 +47,7 @@ public:
       laser_link = 0.24;
       dock_dis = 0.65;
       leg_min = 0.42;
-      leg_max = 0.72;
+      leg_max = 0.76;
     }
 
     // Services, subscribers, and publishers
@@ -194,11 +194,6 @@ private:
       xxx = xxx + xM2;
       yyy = yyy + yM2;
       /////////////////////////////////////////
-    } else {
-      xxx = 0;
-      yyy = 0;
-      xM2 = 0;
-      yM2 = 0;
     }
 
     // Creating transform
@@ -215,8 +210,9 @@ private:
     t.transform.rotation.y = 0.0;
     t.transform.rotation.z = 0.0;
     t.transform.rotation.w = 1.0;
-
-    tf_broadcaster_->sendTransform(t);
+    if (shelf_) {
+      tf_broadcaster_->sendTransform(t);
+    }
 
     // Control switch
     switch (step_) {
@@ -340,11 +336,11 @@ private:
     case 70: {
       error_yaw = -std::atan2(yM2, xM2);
       error_distance = std::sqrt(std::pow(xM2, 2) + std::pow(yM2, 2));
-      if (error_distance > 0.1) { // Changed from 0.15
-        xx = std::max(0.2 * error_distance, 0.1);
-        zz = (error_yaw > 0) ? std::max(0.5 * error_yaw, 0.1)
-                             : std::min(0.5 * error_yaw, -0.1);
-      } else {
+
+      xx = std::max(0.2 * error_distance, 0.1);
+      zz = (error_yaw > 0) ? std::max(0.5 * error_yaw, 0.1)
+                           : std::min(0.5 * error_yaw, -0.1);
+      if (error_distance < 0.15 || !shelf_) {
         step_ = 80;
         // Next step
         xx = zz = 0.0;
@@ -357,9 +353,9 @@ private:
       // Final alignment
     case 80: {
       error_yaw = -std::atan2(yM2, xM2);
-      if (std::abs(error_yaw) > 0.1) {
-        zz = 0.5 * error_yaw;
-      } else {
+
+      zz = 0.5 * error_yaw;
+      if (std::abs(error_yaw) < 0.1 || !shelf_) {
         step_ = 90;
         // Next step
         xx = zz = 0.0;
