@@ -76,7 +76,7 @@ if(BUILD_TESTING)
 endif()
 
 install(DIRECTORY
-  
+  launch
   scripts
   DESTINATION share/${PROJECT_NAME}/
 )

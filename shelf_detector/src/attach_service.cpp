@@ -17,7 +17,7 @@ class ApproachService : public rclcpp::Node {
 public:
   ApproachService() : Node("transform_node") {
 
-    RCLCPP_INFO(this->get_logger(), "Transform node running.");
+    RCLCPP_INFO(this->get_logger(), "Service node running.");
     // Callback groups
     service_callback_group_ = this->create_callback_group(
         rclcpp::CallbackGroupType::MutuallyExclusive);
@@ -46,7 +46,7 @@ public:
       vel_topic = "/cmd_vel";
       laser_link = 0.24;
       dock_dis = 0.65;
-      leg_min = 0.42;
+      leg_min = 0.50;
       leg_max = 0.76;
     }
 
@@ -78,7 +78,7 @@ private:
   void service_callback(
       const std::shared_ptr<shelf_detector::srv::GoToLoading::Request> request,
       std::shared_ptr<shelf_detector::srv::GoToLoading::Response> response) {
-    RCLCPP_INFO(this->get_logger(), "Service called");
+    // RCLCPP_INFO(this->get_logger(), "Service called");
     if (request->attach_to_shelf == 1) {
       response->complete = shelf_;
       if (shelf_) {
@@ -218,11 +218,11 @@ private:
     switch (step_) {
 
     case 0: {
-      if (counter_ % 10 == 0) {
+      /*if (counter_ % 10 == 0) {
         RCLCPP_INFO(this->get_logger(), "\nLeg dis is %.2f\nShelf: %d",
                     leg_distance_, shelf_);
       }
-      counter_ += 1;
+      counter_ += 1;*/
       break;
     }
 

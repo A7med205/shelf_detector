@@ -120,14 +120,14 @@ private:
     message.header.frame_id = "map";
     message.header.stamp = this->get_clock()->now();
 
-    message.pose.pose.position.x = current_x;
-    message.pose.pose.position.y = current_y;
+    message.pose.pose.position.x = -0.58;
+    message.pose.pose.position.y = 0.06;
     message.pose.pose.position.z = 0.0;
 
     message.pose.pose.orientation.x = 0.0;
     message.pose.pose.orientation.y = 0.0;
-    message.pose.pose.orientation.z = current_z;
-    message.pose.pose.orientation.w = current_w;
+    message.pose.pose.orientation.z = 0;
+    message.pose.pose.orientation.w = 1;
 
     // Publishing the message
     pose_publisher_->publish(message);
@@ -272,9 +272,9 @@ private:
       double angle_to_waypoint =
           std::atan2(waypoints[goal_index + 1] - current_y,
                      waypoints[goal_index] - current_x);
-      yaw_ = (yaw_ > 0) ? yaw_ - M_PI : yaw_ + M_PI;
+      // yaw_ = (yaw_ > 0) ? yaw_ - M_PI : yaw_ + M_PI;
       yaw_error = angle_to_waypoint - yaw_;
-      if (std::abs(yaw_error) > 0.1 && !deliver_) {
+      if (std::abs(yaw_error) > 0.1) {
         zz = (yaw_error > 0) ? std::max(0.5 * yaw_error, 0.5)
                              : std::min(0.5 * yaw_error, -0.5);
       } else {
@@ -560,15 +560,6 @@ private:
     auto result_future_1 = param_client_1->async_send_request(
         request_1, std::bind(&NavigateToPoseClient::resize_response_1, this,
                              std::placeholders::_1));
-
-    /*auto request_2 =
-        std::make_shared<rcl_interfaces::srv::SetParameters::Request>();
-    request_2->parameters.push_back(
-        rclcpp::Parameter("robot_radius", size).to_parameter_msg());
-
-    auto result_future_2 = param_client_2->async_send_request(
-        request_2, std::bind(&NavigateToPoseClient::resize_response_2, this,
-                             std::placeholders::_1));*/
   }
 
   void srv_clbk(rclcpp::Client<GoToLoading>::SharedFuture future) {
@@ -596,7 +587,7 @@ private:
       if (response->complete) {
         RCLCPP_INFO(this->get_logger(), "Attachment result: %d",
                     response->complete);
-        resize_function(0.28);
+        resize_function(0.26);
         cmd = Command::DeliverGoal;
       }
     } else {
@@ -624,26 +615,6 @@ private:
     }
   }
 
-  /*void resize_response_2(
-      rclcpp::Client<rcl_interfaces::srv::SetParameters>::SharedFuture future) {
-    auto status = future.wait_for(std::chrono::seconds(1));
-
-    if (status == std::future_status::ready) {
-      auto response = future.get();
-      for (const auto &result : response->results) {
-        if (result.successful) {
-          RCLCPP_INFO(this->get_logger(),
-                      "Local map parameter set successfully.");
-        } else {
-          RCLCPP_WARN(this->get_logger(), "Failed to set parameter: %s",
-                      result.reason.c_str());
-        }
-      }
-    } else {
-      RCLCPP_INFO(this->get_logger(), "Service In-Progress...");
-    }
-  }*/
-
   rclcpp_action::Client<NavigateToPoseMsg>::SharedPtr act_client_;
   rclcpp::Client<GoToLoading>::SharedPtr srv_client_;
   rclcpp::Subscription<std_msgs::msg::Int32>::SharedPtr command_sub;
@@ -654,7 +625,6 @@ private:
       pose_publisher_;
   rclcpp::TimerBase::SharedPtr controller_;
   rclcpp::Client<rcl_interfaces::srv::SetParameters>::SharedPtr param_client_1;
-  rclcpp::Client<rcl_interfaces::srv::SetParameters>::SharedPtr param_client_2;
 
   enum class Command {
     None,
