@@ -40,9 +40,6 @@ public:
         "/odom", 10,
         std::bind(&NavigateToPoseClient::odom_callback, this,
                   std::placeholders::_1));
-
-    cmd_vel_publisher =
-        this->create_publisher<geometry_msgs::msg::Twist>("/cmd_vel", 10);
     elevator_publisher =
         this->create_publisher<std_msgs::msg::String>("/elevator_down", 10);
     task_publisher =
@@ -71,6 +68,7 @@ public:
       H2 = {5.46, -0.03, 4.39, 0.11, 2.49, 0.10, 0.68, 0.04, 0.04, 0.06};
       D1 = {0.92, -2.09, 0.68, 0.038, 2.54, 0.26};
       D2 = {4.39, 0.11, 2.54, 0.26};
+      initial_x = -0.58;
       vel_topic = "/diffbot_base_controller/cmd_vel_unstamped";
     } else {
       M = {-0.02, -2.01, -0.01, -0.04, 1.09, 0.01, 2.45, -0.01, 3.56, -0.21};
@@ -78,6 +76,7 @@ public:
       H2 = {3.56, -0.21, 2.45, 0.00, 1.09, 0.01, -0.01, -0.04, -0.58, 0.06};
       D1 = {-0.01, -0.04, 1.11, 0.17};
       D2 = {2.45, -0.01, 1.11, 0.17};
+      initial_x = 0.04;
       vel_topic = "/cmd_vel";
     }
     cmd_vel_publisher =
@@ -121,7 +120,7 @@ private:
     message.header.frame_id = "map";
     message.header.stamp = this->get_clock()->now();
 
-    message.pose.pose.position.x = 0.04; //-0.58;
+    message.pose.pose.position.x = initial_x;
     message.pose.pose.position.y = 0.06;
     message.pose.pose.position.z = 0.0;
 
@@ -139,6 +138,7 @@ private:
   void command_callback(const std_msgs::msg::Int32::SharedPtr msg) {
     if (msg->data == 0) {
       RCLCPP_INFO(this->get_logger(), "I received: '%d'", msg->data);
+      std_msgs::msg::Int32 task_msg;
       task_msg.data = 5;
       task_publisher->publish(task_msg);
       cmd = Command::None;
@@ -150,8 +150,6 @@ private:
       cmd = Command::HomeGoal;
     } else if (msg->data == 3) {
       RCLCPP_INFO(this->get_logger(), "I received: '%d'", msg->data);
-      task_msg.data = 3;
-      task_publisher->publish(task_msg);
       cmd = Command::DeliverGoal;
     }
   }
@@ -160,6 +158,7 @@ private:
     switch (cmd) {
     // Search mode
     case Command::SearchGoal: {
+      RCLCPP_INFO(this->get_logger(), "Starting search");
       std_msgs::msg::Int32 task_msg;
       task_msg.data = 1;
       task_publisher->publish(task_msg);
@@ -172,11 +171,8 @@ private:
       round_ = 1;
 
       waypoints = M;
-      RCLCPP_INFO(this->get_logger(), "Finding closest end");
       next_waypoint(end_index, goal_index);
-
       cmd = Command::Rotate;
-      RCLCPP_INFO(this->get_logger(), "Starting rotation");
 
       break;
     }
@@ -220,8 +216,6 @@ private:
       }
 
       cmd = Command::Rotate;
-      RCLCPP_INFO(this->get_logger(), "Starting rotation");
-
       break;
     }
 
@@ -263,8 +257,6 @@ private:
       }
 
       cmd = Command::Rotate;
-      RCLCPP_INFO(this->get_logger(), "Starting rotation");
-
       break;
     }
 
@@ -295,7 +287,6 @@ private:
         RCLCPP_INFO(this->get_logger(), "\nSending:\nEnd: %d\nGoal: %d",
                     end_index / 2 + 1, goal_index / 2 + 1);
         send_goal(waypoints[goal_index], waypoints[goal_index + 1]);
-        RCLCPP_INFO(this->get_logger(), "Goal sent");
         nav_wait_ = true;
       }
 
@@ -660,7 +651,7 @@ private:
   std::vector<double> waypoints, M, H1, H2, D1, D2;
   rclcpp::Time start_time, end_time;
   std::string vel_topic;
-  double current_x, current_y, current_z, current_w, yaw_;
+  double current_x, current_y, current_z, current_w, yaw_, initial_x;
   double yaw_error, error_distance, xx, zz, x1, y1;
   int command_, end_index, goal_index, round_, mode_param;
   bool search_, home_, deliver_, control_, aborted_, success_, nav_wait_,

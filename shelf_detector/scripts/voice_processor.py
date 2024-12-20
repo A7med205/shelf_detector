@@ -98,7 +98,7 @@ class VoiceProcessor(Node):
             self.get_logger().error(f"Error processing audio data: {e}")
 
     def publish_command(self, final_cmd):
-        final_cmd_msg = String()
+        final_cmd_msg = Int32()
         final_cmd_msg.data = final_cmd
         self.publisher.publish(final_cmd_msg)
         self.get_logger().info(f"Published command: {final_cmd}")

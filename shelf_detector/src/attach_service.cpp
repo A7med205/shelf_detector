@@ -93,6 +93,11 @@ private:
       step_ = 10;
       response->complete = true;
       RCLCPP_INFO(this->get_logger(), "Finished attachment with cart");
+    } else if (request->attach_to_shelf == 0) {
+      RCLCPP_INFO(this->get_logger(), "1/11 Rotating towards park position");
+      step_ = 130;
+      response->complete = true;
+      RCLCPP_INFO(this->get_logger(), "Finished attachment with cart");
     }
   }
 
