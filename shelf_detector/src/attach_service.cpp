@@ -1,6 +1,8 @@
 #include "geometry_msgs/msg/twist.hpp"
 #include "nav_msgs/msg/odometry.hpp"
 #include "sensor_msgs/msg/laser_scan.hpp"
+#include "std_msgs/msg/detail/int32__struct.hpp"
+#include "std_msgs/msg/int32.hpp"
 #include "std_msgs/msg/string.hpp"
 #include <algorithm>
 #include <chrono>
@@ -69,6 +71,8 @@ public:
         this->create_publisher<geometry_msgs::msg::Twist>(vel_topic, 10);
     elevator_publisher =
         this->create_publisher<std_msgs::msg::String>("/elevator_up", 10);
+    command_publisher =
+        this->create_publisher<std_msgs::msg::Int32>("/command_topic", 10);
     leg_distance_ = 0.0;
     intensity_threshold = 2000;
     step_ = counter_ = 0;
@@ -87,12 +91,12 @@ private:
     } else if (request->attach_to_shelf == 10) {
       RCLCPP_INFO(this->get_logger(), "1/9 Rotating towards park position");
       step_ = 10;
-      while (!success) {
+      /*while (!success) {
         if (success) {
           break;
         }
         // std::this_thread::sleep_for(std::chrono::milliseconds(1000));
-      }
+      }*/
       response->complete = true;
       RCLCPP_INFO(this->get_logger(), "Finished attachment with cart");
     }
@@ -417,6 +421,9 @@ private:
       vel_msg.angular.z = zz;
       cmd_vel_publisher->publish(vel_msg);
       if (step_ == 120) {
+        auto msg = std_msgs::msg::Int32();
+        msg.data = 3;
+        command_publisher->publish(msg);
         control = false;
         success = true;
       }
@@ -434,6 +441,7 @@ private:
   rclcpp::Subscription<nav_msgs::msg::Odometry>::SharedPtr odom_subscriber;
   rclcpp::Publisher<geometry_msgs::msg::Twist>::SharedPtr cmd_vel_publisher;
   rclcpp::Publisher<std_msgs::msg::String>::SharedPtr elevator_publisher;
+  rclcpp::Publisher<std_msgs::msg::Int32>::SharedPtr command_publisher;
 
   // Main variables
   double leg_distance_;

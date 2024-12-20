@@ -50,6 +50,8 @@ ament_target_dependencies(shelf_client
   rcl_interfaces
   nav2_msgs
   tf2
+  sensor_msgs
+  tf2_ros
   nav_msgs
   geometry_msgs
   std_msgs

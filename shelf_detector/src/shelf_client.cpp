@@ -143,6 +143,9 @@ private:
     } else if (msg->data == 0) {
       RCLCPP_INFO(this->get_logger(), "I received: '%d'", msg->data);
       cmd = Command::None;
+    } else if (msg->data == 3) {
+      RCLCPP_INFO(this->get_logger(), "I received: '%d'", msg->data);
+      cmd = Command::DeliverGoal;
     }
   }
 
@@ -271,11 +274,6 @@ private:
 
     case Command::SendGoals: {
 
-      if (deliver_ && aborted_) {
-        cmd = Command::Rotate;
-        break;
-      }
-
       // Sending current goal
       if (!nav_wait_) {
         RCLCPP_INFO(this->get_logger(), "\nSending:\nEnd: %d\nGoal: %d",
@@ -283,6 +281,12 @@ private:
         send_goal(waypoints[goal_index], waypoints[goal_index + 1]);
         RCLCPP_INFO(this->get_logger(), "Goal sent");
         nav_wait_ = true;
+      }
+
+      if (deliver_ && aborted_) {
+        cmd = Command::Rotate;
+        control_ = true;
+        break;
       }
 
       // Checking success and switching to next goal
@@ -507,6 +511,8 @@ private:
 
     // Send the goal
     act_client_->async_send_goal(goal_msg, send_goal_options);
+    aborted_ = false;
+    success_ = false;
   }
 
   void goal_response_callback(
@@ -576,7 +582,7 @@ private:
         RCLCPP_INFO(this->get_logger(), "Attachment result: %d",
                     response->complete);
         resize_function(0.26);
-        cmd = Command::DeliverGoal;
+        cmd = Command::None;
       }
     } else {
       RCLCPP_INFO(this->get_logger(), "Service In-Progress...");
