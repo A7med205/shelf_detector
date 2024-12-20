@@ -78,7 +78,7 @@ public:
       vel_topic = "/cmd_vel";
     }
     cmd_vel_publisher =
-        this->create_publisher<geometry_msgs::msg::Twist>("/cmd_vel", 10);
+        this->create_publisher<geometry_msgs::msg::Twist>(vel_topic, 10);
 
     // Waiting for the /navigate_to_pose action server
     while (!act_client_->wait_for_action_server(1s)) {
@@ -118,7 +118,7 @@ private:
     message.header.frame_id = "map";
     message.header.stamp = this->get_clock()->now();
 
-    message.pose.pose.position.x = -0.58;
+    message.pose.pose.position.x = 0.04; //-0.58;
     message.pose.pose.position.y = 0.06;
     message.pose.pose.position.z = 0.0;
 
@@ -158,11 +158,7 @@ private:
       srv_wait_ = false;
       round_ = 1;
 
-      // Finding closest end
-      // waypoints = {2.27, -2.04, 0.92, -2.09, 0.68, 0.04,
-      //           2.49, 0.10,  4.39, 0.11,  5.46, -0.03};
-      waypoints = {-0.02, -2.01, -0.01, -0.04, 1.09,
-                   0.01,  2.45,  -0.01, 3.56,  -0.21};
+      waypoints = M;
       RCLCPP_INFO(this->get_logger(), "Finding closest end");
       next_waypoint(end_index, goal_index);
 
@@ -184,17 +180,13 @@ private:
 
       // Finding closest end
       RCLCPP_INFO(this->get_logger(), "Finding closest direction to home");
-      // waypoints = {2.27, -2.04, 0.92, -2.09, 0.04, 0.06};
-      waypoints = {-0.02, -2.01, -0.01, -0.04, -0.58, 0.06};
+      waypoints = H1;
       next_waypoint(end_index, goal_index);
       std::pair<double, double> point_1 = {waypoints[goal_index],
                                            waypoints[goal_index + 1]};
       int goal_1 = goal_index;
 
-      // waypoints = {5.46, -0.03, 4.39, 0.11, 2.49, 0.10, 0.68, 0.04, 0.04,
-      // 0.06};
-      waypoints = {3.56, -0.21, 2.45,  0.00,  1.09,
-                   0.01, -0.01, -0.04, -0.58, 0.06};
+      waypoints = H2;
       next_waypoint(end_index, goal_index);
       std::pair<double, double> point_2 = {waypoints[goal_index],
                                            waypoints[goal_index + 1]};
@@ -206,8 +198,7 @@ private:
           std::hypot(point_2.first - current_x, point_2.second - current_y);
 
       if (dist_to_point_1 < dist_to_point_2) {
-        // waypoints = {2.27, -2.04, 0.92, -2.09, 0.04, 0.06};
-        waypoints = {-0.02, -2.01, -0.01, -0.04, -0.58, 0.06};
+        waypoints = H1;
         end_index = waypoints.size() - 2;
         goal_index = goal_1;
       }
@@ -228,15 +219,13 @@ private:
 
       // Finding closest end
       RCLCPP_INFO(this->get_logger(), "Finding direction to delivery target");
-      // waypoints = {0.92, -2.09, 0.68, 0.038, 2.54, 0.26};
-      waypoints = {-0.01, -0.04, 1.11, 0.17};
+      waypoints = D1;
       next_waypoint(end_index, goal_index);
       std::pair<double, double> point_1 = {waypoints[goal_index],
                                            waypoints[goal_index + 1]};
       int goal_1 = goal_index;
 
-      // waypoints = {4.39, 0.11, 2.54, 0.26};
-      waypoints = {2.45, -0.01, 1.11, 0.17};
+      waypoints = D2;
       next_waypoint(end_index, goal_index);
       std::pair<double, double> point_2 = {waypoints[goal_index],
                                            waypoints[goal_index + 1]};
@@ -248,8 +237,8 @@ private:
           std::hypot(point_2.first - current_x, point_2.second - current_y);
 
       if (dist_to_point_1 < dist_to_point_2) {
-        // waypoints = {0.92, -2.09, 0.68, 0.038, 2.54, 0.26};
-        waypoints = {-0.01, -0.04, 1.11, 0.17};
+
+        waypoints = D1;
         end_index = waypoints.size() - 2;
         goal_index = goal_1;
       }
@@ -261,11 +250,6 @@ private:
     }
 
     case Command::Rotate: {
-      // Checking for ongoing goal
-      if (nav_wait_ == true && !success_ && !aborted_) {
-        break;
-      }
-
       // Rotating towards goal
       double angle_to_waypoint =
           std::atan2(waypoints[goal_index + 1] - current_y,
@@ -286,6 +270,12 @@ private:
     }
 
     case Command::SendGoals: {
+
+      if (deliver_ && aborted_) {
+        cmd = Command::Rotate;
+        break;
+      }
+
       // Sending current goal
       if (!nav_wait_) {
         RCLCPP_INFO(this->get_logger(), "\nSending:\nEnd: %d\nGoal: %d",

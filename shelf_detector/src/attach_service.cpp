@@ -91,7 +91,7 @@ private:
         if (success) {
           break;
         }
-        std::this_thread::sleep_for(std::chrono::milliseconds(200));
+        // std::this_thread::sleep_for(std::chrono::milliseconds(1000));
       }
       response->complete = true;
       RCLCPP_INFO(this->get_logger(), "Finished attachment with cart");
@@ -246,7 +246,7 @@ private:
     case 20: {
       error_yaw = -std::atan2(yyy, xxx);
       error_distance = std::sqrt(std::pow(xxx, 2) + std::pow(yyy, 2));
-      if (error_distance > 0.02) {
+      if (error_distance > 0.05) {
         xx = std::max(0.2 * error_distance, 0.1);
         zz = (error_yaw > 0) ? std::max(0.5 * error_yaw, 0.1)
                              : std::min(0.5 * error_yaw, -0.1);
@@ -340,7 +340,7 @@ private:
       xx = std::max(0.2 * error_distance, 0.1);
       zz = (error_yaw > 0) ? std::max(0.5 * error_yaw, 0.1)
                            : std::min(0.5 * error_yaw, -0.1);
-      if (error_distance < 0.15 || !shelf_) {
+      if (error_distance < 0.15) {
         step_ = 80;
         // Next step
         xx = zz = 0.0;
@@ -355,7 +355,7 @@ private:
       error_yaw = -std::atan2(yM2, xM2);
 
       zz = 0.5 * error_yaw;
-      if (std::abs(error_yaw) < 0.1 || !shelf_) {
+      if (std::abs(error_yaw) < 0.1) {
         step_ = 90;
         // Next step
         xx = zz = 0.0;
