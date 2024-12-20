@@ -46,7 +46,7 @@ public:
       leg_max = 0.8;
     } else {
       vel_topic = "/cmd_vel";
-      laser_link = 0.24;
+      laser_link = 0.25;
       dock_dis = 0.65;
       leg_min = 0.50;
       leg_max = 0.76;
@@ -89,14 +89,8 @@ private:
         RCLCPP_INFO(this->get_logger(), "Shelf detected");
       }
     } else if (request->attach_to_shelf == 10) {
-      RCLCPP_INFO(this->get_logger(), "1/9 Rotating towards park position");
+      RCLCPP_INFO(this->get_logger(), "1/11 Rotating towards park position");
       step_ = 10;
-      /*while (!success) {
-        if (success) {
-          break;
-        }
-        // std::this_thread::sleep_for(std::chrono::milliseconds(1000));
-      }*/
       response->complete = true;
       RCLCPP_INFO(this->get_logger(), "Finished attachment with cart");
     }
@@ -240,7 +234,7 @@ private:
                              : std::min(0.5 * error_yaw, -0.1);
       } else {
         step_ = 20; // Next step
-        RCLCPP_INFO(this->get_logger(), "2/9 Moving towards park position");
+        RCLCPP_INFO(this->get_logger(), "2/11 Moving towards park position");
         xx = zz = 0.0;
       }
       break;
@@ -256,7 +250,7 @@ private:
                              : std::min(0.5 * error_yaw, -0.1);
       } else {
         step_ = 30; // Next step
-        RCLCPP_INFO(this->get_logger(), "3/9 Rotating towards furthest leg");
+        RCLCPP_INFO(this->get_logger(), "3/11 Rotating towards furthest leg");
         xx = zz = 0.0;
       }
       break;
@@ -275,7 +269,7 @@ private:
                              : std::min(0.5 * error_yaw, -0.1);
       } else {
         step_ = 40; // Next step
-        RCLCPP_INFO(this->get_logger(), "4/9 Moving towards furthest leg");
+        RCLCPP_INFO(this->get_logger(), "4/11 Moving towards furthest leg");
         xx = zz = 0.0;
       }
       break;
@@ -297,7 +291,7 @@ private:
       } else {
         step_ = 50;
         // Next step
-        RCLCPP_INFO(this->get_logger(), "5/9 Correcting for lidar position");
+        RCLCPP_INFO(this->get_logger(), "5/11 Correcting for lidar position");
         xx = zz = 0.0;
         x1 = msg->pose.pose.position.x;
         y1 = msg->pose.pose.position.y;
@@ -316,7 +310,7 @@ private:
         step_ = 60;
         // Next step
         xx = zz = 0.0;
-        RCLCPP_INFO(this->get_logger(), "6/9 Rotating towards TF");
+        RCLCPP_INFO(this->get_logger(), "6/11 Rotating towards TF");
       }
       break;
     }
@@ -331,7 +325,7 @@ private:
         step_ = 70;
         // Next step
         xx = zz = 0.0;
-        RCLCPP_INFO(this->get_logger(), "7/9 Moving towards TF");
+        RCLCPP_INFO(this->get_logger(), "7/11 Moving towards TF");
       }
       break;
     }
@@ -349,7 +343,7 @@ private:
         // Next step
         xx = zz = 0.0;
         // RCLCPP_INFO(this->get_logger(), "Starting final alignment");
-        RCLCPP_INFO(this->get_logger(), "8/9 Final alignment");
+        RCLCPP_INFO(this->get_logger(), "8/11 Final alignment");
       }
       break;
     }
@@ -363,7 +357,7 @@ private:
         step_ = 90;
         // Next step
         xx = zz = 0.0;
-        RCLCPP_INFO(this->get_logger(), "9/9 Docking using odometry");
+        RCLCPP_INFO(this->get_logger(), "9/11 Docking using odometry");
         x1 = msg->pose.pose.position.x;
         y1 = msg->pose.pose.position.y;
       }
@@ -382,7 +376,7 @@ private:
         auto elevator_msg = std_msgs::msg::String();
         elevator_publisher->publish(elevator_msg);
         start_time = this->get_clock()->now();
-        RCLCPP_INFO(this->get_logger(), "Lifting cart");
+        RCLCPP_INFO(this->get_logger(), "10/11 Lifting cart");
       }
       break;
     }
@@ -393,6 +387,7 @@ private:
         x1 = msg->pose.pose.position.x;
         y1 = msg->pose.pose.position.y;
         step_ = 110;
+        RCLCPP_INFO(this->get_logger(), "11/11 Backing up");
       }
 
       break;

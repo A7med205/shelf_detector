@@ -1,6 +1,6 @@
 import rclpy
 from rclpy.node import Node
-from std_msgs.msg import String
+from std_msgs.msg import String, Int32
 import assemblyai as aai
 import base64
 import boto3
@@ -17,7 +17,7 @@ class VoiceProcessor(Node):
             10
         )
 
-        self.publisher = self.create_publisher(String, '/voice_commands', 10)
+        self.publisher = self.create_publisher(Int32, '/command_topic', 10)
         self.get_logger().info("Voice Processor Node Initialized")
 
         # Configuring AWS and S3 details
@@ -30,6 +30,21 @@ class VoiceProcessor(Node):
 
         self.bucket_name = 'voiceinput--eun1-az1--x-s3'
         self.s3_key = '/audio_input.webm'  # Path in the S3 bucket
+
+    def find_match(self, input_string):
+        # Hardcoded array of strings
+        keywords = ["stop", "search", "home"]
+
+        # Convert input string to lowercase for case-insensitive comparison
+        input_string_lower = input_string.lower()
+
+        # Iterate through the keywords and return the index of the first match
+        for index, keyword in enumerate(keywords):
+            if keyword.lower() in input_string_lower:
+                return index
+
+        # Return -1 if no match is found
+        return -1
 
     def audio_callback(self, msg):
         self.get_logger().info("Audio data received")
@@ -76,16 +91,17 @@ class VoiceProcessor(Node):
                 self.get_logger().error(f"Transcription error: {transcript.error}")
             else:
                 command = transcript.text
-                self.publish_command(command)
+                final_cmd = self.find_match(command)
+                self.publish_command(final_cmd)
 
         except Exception as e:
             self.get_logger().error(f"Error processing audio data: {e}")
 
-    def publish_command(self, command):
-        command_msg = String()
-        command_msg.data = command
-        self.publisher.publish(command_msg)
-        self.get_logger().info(f"Published Command: {command}")
+    def publish_command(self, final_cmd):
+        final_cmd_msg = String()
+        final_cmd_msg.data = final_cmd
+        self.publisher.publish(final_cmd_msg)
+        self.get_logger().info(f"Published command: {final_cmd}")
 
 def main(args=None):
     rclpy.init(args=args)

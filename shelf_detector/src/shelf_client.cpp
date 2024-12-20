@@ -4,6 +4,7 @@
 #include "nav_msgs/msg/odometry.hpp"
 #include "rcl_interfaces/srv/set_parameters.hpp"
 #include "rclcpp/parameter.hpp"
+#include "std_msgs/msg/detail/int32__struct.hpp"
 #include <cmath>
 #include <future>
 #include <rclcpp/rclcpp.hpp>
@@ -44,6 +45,8 @@ public:
         this->create_publisher<geometry_msgs::msg::Twist>("/cmd_vel", 10);
     elevator_publisher =
         this->create_publisher<std_msgs::msg::String>("/elevator_down", 10);
+    task_publisher =
+        this->create_publisher<std_msgs::msg::Int32>("/current_task", 10);
     pose_publisher_ =
         this->create_publisher<geometry_msgs::msg::PoseWithCovarianceStamped>(
             "/initialpose", 10);
@@ -134,17 +137,21 @@ private:
 
   // ros2 topic pub -1 /command_topic std_msgs/Int32 "{data: 1}"
   void command_callback(const std_msgs::msg::Int32::SharedPtr msg) {
-    if (msg->data == 1) {
+    if (msg->data == 0) {
+      RCLCPP_INFO(this->get_logger(), "I received: '%d'", msg->data);
+      task_msg.data = 5;
+      task_publisher->publish(task_msg);
+      cmd = Command::None;
+    } else if (msg->data == 1) {
       RCLCPP_INFO(this->get_logger(), "I received: '%d'", msg->data);
       cmd = Command::SearchGoal;
     } else if (msg->data == 2) {
       RCLCPP_INFO(this->get_logger(), "I received: '%d'", msg->data);
       cmd = Command::HomeGoal;
-    } else if (msg->data == 0) {
-      RCLCPP_INFO(this->get_logger(), "I received: '%d'", msg->data);
-      cmd = Command::None;
     } else if (msg->data == 3) {
       RCLCPP_INFO(this->get_logger(), "I received: '%d'", msg->data);
+      task_msg.data = 3;
+      task_publisher->publish(task_msg);
       cmd = Command::DeliverGoal;
     }
   }
@@ -153,6 +160,9 @@ private:
     switch (cmd) {
     // Search mode
     case Command::SearchGoal: {
+      std_msgs::msg::Int32 task_msg;
+      task_msg.data = 1;
+      task_publisher->publish(task_msg);
       // Setting optotions
       search_ = true;
       home_ = false;
@@ -173,6 +183,9 @@ private:
 
     // Return to home mode
     case Command::HomeGoal: {
+      std_msgs::msg::Int32 task_msg;
+      task_msg.data = 4;
+      task_publisher->publish(task_msg);
       // Setting options
       home_ = true;
       search_ = false;
@@ -213,6 +226,9 @@ private:
     }
 
     case Command::DeliverGoal: {
+      std_msgs::msg::Int32 task_msg;
+      task_msg.data = 3;
+      task_publisher->publish(task_msg);
       // Setting options
       deliver_ = true;
       search_ = false;
@@ -400,7 +416,10 @@ private:
         xx = -0.1;
         zz = 0.0;
       } else {
-        cmd = Command::None;
+        std_msgs::msg::Int32 task_msg;
+        task_msg.data = 0;
+        task_publisher->publish(task_msg);
+        cmd = Command::HomeGoal;
         xx = zz = 0.0;
       }
       break;
@@ -582,6 +601,9 @@ private:
         RCLCPP_INFO(this->get_logger(), "Attachment result: %d",
                     response->complete);
         resize_function(0.26);
+        std_msgs::msg::Int32 task_msg;
+        task_msg.data = 2;
+        task_publisher->publish(task_msg);
         cmd = Command::None;
       }
     } else {
@@ -615,6 +637,7 @@ private:
   rclcpp::Subscription<nav_msgs::msg::Odometry>::SharedPtr odom_sub;
   rclcpp::Publisher<geometry_msgs::msg::Twist>::SharedPtr cmd_vel_publisher;
   rclcpp::Publisher<std_msgs::msg::String>::SharedPtr elevator_publisher;
+  rclcpp::Publisher<std_msgs::msg::Int32>::SharedPtr task_publisher;
   rclcpp::Publisher<geometry_msgs::msg::PoseWithCovarianceStamped>::SharedPtr
       pose_publisher_;
   rclcpp::TimerBase::SharedPtr controller_;
