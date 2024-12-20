@@ -501,11 +501,15 @@ private:
     if (x == 1.11 && y == 0.17) {
       goal_msg.pose.pose.orientation.z = 0.70;
       goal_msg.pose.pose.orientation.w = 0.70;
-    }
-
-    if (x == 2.54 && y == 0.26) {
+    } else if (x == 2.54 && y == 0.26) {
       goal_msg.pose.pose.orientation.z = 0.707;
       goal_msg.pose.pose.orientation.w = 0.707;
+    } else if (x == 0.04 && y == 0.06) {
+      goal_msg.pose.pose.orientation.z = 0.0;
+      goal_msg.pose.pose.orientation.w = 1.0;
+    } else if (x == -0.58 && y == 0.06) {
+      goal_msg.pose.pose.orientation.z = 0.0;
+      goal_msg.pose.pose.orientation.w = 1.0;
     }
 
     RCLCPP_INFO(this->get_logger(), "Sending goal");
