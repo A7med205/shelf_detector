@@ -1,6 +1,12 @@
 #### Description
 ROS2 nodes and web interface for automating the search, detection and delivery of a warehouse shelf using the RB-1 BASE mobile robot and the Nav2 package.
 
+#### Sequence Demonstration:
+![](https://github.com/A7med205/shelf_detector/blob/main/media/Full.gif)
+
+#### Webapp Appearance:
+![](https://github.com/A7med205/shelf_detector/blob/main/media/App.PNG)
+
 #### Dependencies
 ```
 Nav2
@@ -35,12 +41,6 @@ ros2 launch shelf_detector web_services_launch_8.py web_dir:=/home/user/webpage_
 * Your webpage_ws directory would be different
 * Real robot rosbridge starts using port 8080 instead of 9090
 * copy the new rosbridge address to the webpage 
-
-#### Webapp Appearance:
-![](https://github.com/A7med205/shelf_detector/blob/main/media/App.PNG)
-
-#### Sequence Demonstration:
-![](https://github.com/A7med205/shelf_detector/blob/main/media/Full.gif)
 
 #### Get addresses
 - Address for the webpage should be http://localaddress:7000
