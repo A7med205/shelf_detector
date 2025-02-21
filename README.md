@@ -39,14 +39,8 @@ ros2 launch shelf_detector web_services_launch_8.py web_dir:=/home/user/webpage_
 #### Webapp Appearance:
 ![](https://github.com/A7med205/shelf_detector/blob/main/media/App.PNG)
 
-#### Webapp Demo:
-![](https://github.com/A7med205/shelf_detector/blob/main/media/Demo.gif)
-
 #### Sequence Demonstration:
 ![](https://github.com/A7med205/shelf_detector/blob/main/media/Full.gif)
-
-#### Attachment Visualization:
-![](https://github.com/A7med205/shelf_detector/blob/main/media/Attach.gif)
 
 #### Get addresses
 - Address for the webpage should be http://localaddress:7000
